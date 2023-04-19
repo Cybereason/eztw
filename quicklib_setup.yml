@@ -1,0 +1,33 @@
+setup:
+  name: eztw
+  description: Easy wrapper for ETW (Event Traceing for Windows)
+  long_description:
+    filename: README.md
+    content_type: text/markdown
+  author: Uri Sternfeld
+  license: MIT License
+  url: https://github.com/Cybereason/eztw
+  python_requires: ">=3.9"
+  top_packages:
+    - eztw
+  version_module_paths:
+    - eztw
+  install_requires:
+    # note: this won't run on non-Windows anyway, so at least let's not fail installation on Linux (in tests)
+    - 'pywin32; platform_system == "Windows"'
+  entry_points:
+    console_scripts:
+      - "eztw_demo_dns = eztw.scripts.demo_dns:main"
+      - "eztw_demo_process = eztw.scripts.demo_process:main"
+      - "eztw_demo_files = eztw.scripts.demo_files:main"
+      - "eztw_consume_provider = eztw.scripts.consume_provider:main"
+      - "eztw_tap_session = eztw.scripts.tap_session:main"
+  classifiers:
+    - "Development Status :: 4 - Beta"
+    - "Intended Audience :: Developers"
+    - "Operating System :: Microsoft :: Windows"
+    - "Programming Language :: Python :: Implementation :: CPython"
+    - "Programming Language :: Python :: 3 :: Only"
+    - "Programming Language :: Python :: 3.9"
+    - "Programming Language :: Python :: 3.10"
+    - "Programming Language :: Python :: 3.11"
