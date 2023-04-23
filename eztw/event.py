@@ -8,11 +8,11 @@ import ctypes
 import functools
 from collections import OrderedDict
 from dataclasses import make_dataclass
-from typing import Union
+from typing import Union, Callable
 
 from .common import FILETIME_to_time, EztwException, as_list, sanitize_name
 from .guid import GUID
-from .tdh import TDH_INTYPE, TdhEvent
+from .tdh import EVENT_FIELD_INTYPE, EventMetadata
 from .consumer import EventRecord
 
 
@@ -96,29 +96,29 @@ class FieldsReader:
         return str(GUID.from_buffer_copy(self.consume(16)))
 
     INTYPE_TO_CONSUMER = {
-        TDH_INTYPE.INTYPE_INT8: consume_BYTE,
-        TDH_INTYPE.INTYPE_UINT8: consume_BYTE,
-        TDH_INTYPE.INTYPE_INT16: consume_USHORT,
-        TDH_INTYPE.INTYPE_UINT16: consume_USHORT,
-        TDH_INTYPE.INTYPE_INT32: consume_ULONG,
-        TDH_INTYPE.INTYPE_UINT32: consume_ULONG,
-        TDH_INTYPE.INTYPE_HEXINT32: consume_ULONG,
-        TDH_INTYPE.INTYPE_INT64: consume_ULONGLONG,
-        TDH_INTYPE.INTYPE_UINT64: consume_ULONGLONG,
-        TDH_INTYPE.INTYPE_HEXINT64: consume_ULONGLONG,
-        TDH_INTYPE.INTYPE_POINTER: consume_POINTER,
-        TDH_INTYPE.INTYPE_BOOLEAN: consume_BOOLEAN,
-        TDH_INTYPE.INTYPE_FILETIME: consume_FILETIME,
-        TDH_INTYPE.INTYPE_SYSTEMTIME: consume_SYSTEMTIME,
-        TDH_INTYPE.INTYPE_UNICODESTRING: consume_WSTRING,
-        TDH_INTYPE.INTYPE_ANSISTRING: consume_STRING,
-        TDH_INTYPE.INTYPE_FLOAT: consume_FLOAT,
-        TDH_INTYPE.INTYPE_DOUBLE: consume_DOUBLE,
-        TDH_INTYPE.INTYPE_SID: consume_SID,
-        TDH_INTYPE.INTYPE_GUID: consume_GUID,
+        EVENT_FIELD_INTYPE.INTYPE_INT8: consume_BYTE,
+        EVENT_FIELD_INTYPE.INTYPE_UINT8: consume_BYTE,
+        EVENT_FIELD_INTYPE.INTYPE_INT16: consume_USHORT,
+        EVENT_FIELD_INTYPE.INTYPE_UINT16: consume_USHORT,
+        EVENT_FIELD_INTYPE.INTYPE_INT32: consume_ULONG,
+        EVENT_FIELD_INTYPE.INTYPE_UINT32: consume_ULONG,
+        EVENT_FIELD_INTYPE.INTYPE_HEXINT32: consume_ULONG,
+        EVENT_FIELD_INTYPE.INTYPE_INT64: consume_ULONGLONG,
+        EVENT_FIELD_INTYPE.INTYPE_UINT64: consume_ULONGLONG,
+        EVENT_FIELD_INTYPE.INTYPE_HEXINT64: consume_ULONGLONG,
+        EVENT_FIELD_INTYPE.INTYPE_POINTER: consume_POINTER,
+        EVENT_FIELD_INTYPE.INTYPE_BOOLEAN: consume_BOOLEAN,
+        EVENT_FIELD_INTYPE.INTYPE_FILETIME: consume_FILETIME,
+        EVENT_FIELD_INTYPE.INTYPE_SYSTEMTIME: consume_SYSTEMTIME,
+        EVENT_FIELD_INTYPE.INTYPE_UNICODESTRING: consume_WSTRING,
+        EVENT_FIELD_INTYPE.INTYPE_ANSISTRING: consume_STRING,
+        EVENT_FIELD_INTYPE.INTYPE_FLOAT: consume_FLOAT,
+        EVENT_FIELD_INTYPE.INTYPE_DOUBLE: consume_DOUBLE,
+        EVENT_FIELD_INTYPE.INTYPE_SID: consume_SID,
+        EVENT_FIELD_INTYPE.INTYPE_GUID: consume_GUID,
     }
 
-    def consumer_by_type(self, in_type: TDH_INTYPE):
+    def consumer_by_type(self, in_type: EVENT_FIELD_INTYPE):
         consumer = self.INTYPE_TO_CONSUMER.get(in_type)
         if consumer is None:
             raise EztwEventParseException(f"Unknown IN_TYPE {in_type!r}")
@@ -131,7 +131,7 @@ class EztwEvent:
     Maintains all known versions of this event and allows easy parsing.
     Each version has its own dataclass (called EventTemplate or EventTemplate_#name#).
     """
-    def __init__(self, event_descriptors: list[TdhEvent]):
+    def __init__(self, event_descriptors: list[EventMetadata]):
         # This instance is initialized from a list of TdhEvent descriptors, so for sanity
         # make sure there's at least one, and they all share the same provider GUID, id, name and keyword
         assert(len(event_descriptors) >= 1)
@@ -144,7 +144,7 @@ class EztwEvent:
         self.keyword = 0
         # Sort the descriptors by their version, and create a template for their parsed fields
         self.versions = {}
-        template_name = "EventTemplate" if self.name is None else f"EventTemplate_{sanitize_name(self.name)}"
+        template_name = f"EventTemplate_{self.id}" if not self.name else f"EventTemplate_{sanitize_name(self.name)}"
         for event_descriptor in event_descriptors:
             # Note that sometimes different versions of the same event have different keywords...
             # Aggregate them just to be on the safe side
@@ -220,10 +220,9 @@ class EztwEvent:
         return f"{self.__class__.__name__}(id={self.id}, name={self.name!r}, " \
                f"provider_guid={self.provider_guid}, keyword={hex(self.keyword)})"
 
-# Utility for uniquely hashing (provider GUID, event ID) from either EventRecord or EztwEvent,
-# as they need to be matched to be properly parsed.
-def event_hash(event: Union[EventRecord, EztwEvent]) -> int:
-    return hash((event.provider_guid, event.id))
+    def __hash__(self):
+        """The event is uniquely identified via its provider GUID and event ID"""
+        return hash((self.provider_guid, self.id))
 
 
 class EztwFilter:
@@ -242,24 +241,28 @@ class EztwFilter:
     >>>     # Do something
     """
     def __init__(self, events: Union[EztwEvent, list[EztwEvent]]):
-        self.event_hashes = {event_hash(event) for event in as_list(events)}
+        self.event_hashes = {hash(event) for event in as_list(events)}
 
     def __contains__(self, event_record: EventRecord):
-        return event_hash(event_record) in self.event_hashes
+        return hash(event_record) in self.event_hashes
 
 
 class EztwDispatcher:
     """
     Simple mapper from event class to a callback function.
 
-    Initialize from a list of pairs: [(EztwEvent, callable)]
+    Initialize from a dict of: { EztwEvent: callable }
     Filtering is done similarly to EztwFilter.
-    The callable must accept two parameters - the event record and the parsed event. The parsed event
+    Each callable must accept two parameters - the event record and the parsed event. The parsed event
     can either be parsed manually (using the parse_event function, for example), but is more often
     returned by an EztwSessionIterator (like the one used in the consume_events function).
 
     The EztwDispatcher is simply invoked by calling it. If the given event record is not a part
-    of the dispatcher, nothing will happen.
+    of the dispatcher, nothing will happen. Note that the hash of both EventRecord and EztwEvent are the
+    same iff both their provider_guid and ID are the same.
+
+    To simplify even further, use the .events member of the dispatcher as a list of events to filter
+    for consume_events and EztwSessionIterator.
 
     Example:
     >>> # Define callback functions for the desired events
@@ -267,21 +270,21 @@ class EztwDispatcher:
     >>>     # Do something
     >>>
     >>> # Initialize from a list of EztwEvent and their desired callback
-    >>> ezd = EztwDispatcher([(some_event, some_callback), ...])
+    >>> ezd = EztwDispatcher({some_event: some_callback, ...})
     >>>
     >>> # Then, given an event record and its parsed event (for example as yielded from consume_events):
-    >>> for event_record, parsed_event in consume_events([some_event]):
+    >>> for event_record, parsed_event in consume_events(ezd.events):
     >>>     # Call the callable (if the event is relevant, otherwise nothing happens)
     >>>     ezd(event_record, parsed_event)
     """
-    def __init__(self, events_and_callbacks):
+    def __init__(self, events_and_callbacks: dict[EztwEvent, Callable]):
         self.events = []
         self.mapping = {}
-        for event, callback in events_and_callbacks:
+        for event, callback in events_and_callbacks.items():
             self.events.append(event)
-            self.mapping[event_hash(event)] = callback
+            self.mapping[hash(event)] = callback
 
     def __call__(self, event_record: EventRecord, parsed_event):
-        dispatch = self.mapping.get(event_hash(event_record))
+        dispatch = self.mapping.get(hash(event_record))
         if dispatch:
             dispatch(event_record, parsed_event)

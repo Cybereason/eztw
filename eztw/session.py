@@ -17,11 +17,7 @@ from .controller import EztwController
 from .provider import eztwm, get_provider_config
 from .consumer import EztwConsumer
 from .event import EztwEvent, EztwFilter
-
-
-# This special GUID indicates lost events
-# https://learn.microsoft.com/en-us/windows/win32/etw/lost-event
-LOST_EVENTS_GUID = "{6a399ae0-4bc6-4de9-870b-3657f8947e7e}"
+from .trace_common import LOST_EVENTS_GUID
 
 
 class EztwSessionIterator:
@@ -111,6 +107,9 @@ class EztwSessionIterator:
         except Exception as e:
             print(f"\nUnhandled error - {e}")
         finally:
+            # If no events where consumed, there's nothing to report
+            if not event_counter:
+                return
             # Print a nice summary of all consumed events
             total_time = time.time() - start_time
             print(f"\nTotal events during {total_time:.2f} seconds:")

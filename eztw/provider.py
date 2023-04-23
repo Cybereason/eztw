@@ -1,7 +1,7 @@
 """
 Implementation of EztwProvider which represents a single provider (and its events).
 Implementation of EztwManager - a utility class for efficiently managing and accessing providers
-by name and GUID in a thread-safe way.
+by name and GUID.
 
 In addition, multiple API functions are exposed:
     get_provider - return EztwProvider by GUID or name
@@ -10,14 +10,14 @@ In addition, multiple API functions are exposed:
     add_manual_provider - manually add a new, non-registered provider
     parse_event - given an EventRecord, parse it (assuming the provider and its events are known)
 """
-import threading
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Union
 
-from .common import sanitize_name, TRACE_LEVEL_VERBOSE, EztwException, as_list
-from .guid import GUID
-from .tdh import tdh_enumerate_providers, tdh_get_provider_events, TdhEvent, EztwTdhException
+from .common import sanitize_name, EztwException, as_list
+from .trace_common import TRACE_LEVEL_VERBOSE, MSNT_SystemTrace_GUID
+from .guid import GUID, canonize_GUID
+from .tdh import tdh_enumerate_providers, tdh_get_provider_events, EventMetadata, EztwTdhException
 from .event import EztwEvent, EventRecord
 
 
@@ -30,7 +30,7 @@ class EztwProvider:
     Represents a trace provider and its events.
     It is constructed from GUID, name and a list of TdhEvent objects (usually done automatically by EztwManager).
     """
-    def __init__(self, guid: str, name: str, event_descriptors: list[TdhEvent]):
+    def __init__(self, guid: str, name: str, event_descriptors: list[EventMetadata]):
         self.guid = str(GUID(guid))
         self.name = name
         # Group the event descriptors by their id
@@ -114,6 +114,9 @@ class EztwManager:
     def __init__(self):
         # This is the EztwProvider cache (starts empty)
         self.providers = {}
+        # This is a tombstone for providers which were asked for but are unavailable
+        # (to prevent using the TDH again for unknown providers)
+        self._unknown_provider_tombstone = object()
         # Get all locally registered providers and map both from GUID to name as well as name to GUID
         self.provider_guid_by_name = {}
         self.provider_name_by_guid = {}
@@ -124,54 +127,45 @@ class EztwManager:
                 continue
             self.provider_name_by_guid[tdh_provider.guid] = tdh_provider.name
         # Special provider (very old kernel provider)
-        self.provider_name_by_guid["{68fdd900-4a3e-11d1-84f4-0000f80464e3}"] = "MSNT_SystemTrace"
-        # Ensure thread safety
-        self.lock = threading.RLock()
-        # This is a tombstone for providers which were asked for but are unavailable
-        # (to prevent using the TDH again for unknown providers)
-        self._invalid_provider = object()
+        self.providers[MSNT_SystemTrace_GUID] = self._unknown_provider_tombstone
+        self.provider_name_by_guid[MSNT_SystemTrace_GUID] = "MSNT_SystemTrace"
 
-    def add_manual_provider(self, provider_guid: str, provider_name: str, provider_events: list[TdhEvent]):
+    def add_manual_provider(self, provider_guid: str, provider_name: str, provider_events: list[EventMetadata]):
         new_provider = EztwProvider(provider_guid, provider_name, provider_events)
-        with self.lock:
-            self.providers[new_provider.guid] = new_provider
-            self.provider_name_by_guid[new_provider.guid] = provider_name
-            self.provider_guid_by_name[canonize_provider_name(provider_name)] = new_provider.guid
-            return new_provider
+        self.providers[new_provider.guid] = new_provider
+        self.provider_name_by_guid[new_provider.guid] = provider_name
+        self.provider_guid_by_name[canonize_provider_name(provider_name)] = new_provider.guid
+        return new_provider
 
     def get_provider_name_from_guid(self, provider_guid: str) -> str:
-        # Canonize GUID string
-        provider_guid = str(GUID(provider_guid))
-        with self.lock:
-            return self.provider_name_by_guid.get(provider_guid) or "Unknown"
+        provider_guid = canonize_GUID(provider_guid)
+        return self.provider_name_by_guid.get(provider_guid) or "Unknown"
 
     def get_provider_by_guid(self, provider_guid: str) -> EztwProvider:
-        # Canonize GUID string
-        provider_guid = str(GUID(provider_guid))
-        with self.lock:
-            provider = self.providers.get(provider_guid)
-            # If provider is a tombstone - we already know this provider is unavailable via TDH API
-            if provider is self._invalid_provider:
-                raise EztwProviderException(f"Could not find events for provider {provider_guid}")
-            if provider:
-                return provider
-            # Add new provider
-            provider_name = self.get_provider_name_from_guid(provider_guid)
-            try:
-                provider_events = tdh_get_provider_events(provider_guid)
-                new_provider = EztwProvider(provider_guid, provider_name, provider_events)
-                self.providers[provider_guid] = new_provider
-                return new_provider
-            except EztwTdhException:
-                # Set a tombstone for this provider GUID, so we won't try again for the next event
-                self.providers[provider_guid] = self._invalid_provider
-                raise EztwProviderException(f"Could not find events for provider {provider_guid}")
+        provider_guid = canonize_GUID(provider_guid)
+        provider = self.providers.get(provider_guid)
+        # If the value for this GUID is a tombstone - we already know this provider is unavailable via TDH API
+        if provider is self._unknown_provider_tombstone:
+            raise EztwProviderException(f"Could not find events for provider {provider_guid}")
+        # If the value for this GUID is cached - simply return it
+        elif provider is not None:
+            return provider
+        # Add new provider
+        provider_name = self.get_provider_name_from_guid(provider_guid)
+        try:
+            provider_events = tdh_get_provider_events(provider_guid)
+            new_provider = EztwProvider(provider_guid, provider_name, provider_events)
+            self.providers[provider_guid] = new_provider
+            return new_provider
+        except EztwTdhException:
+            # Set a tombstone for this provider GUID, so we won't try again for the next event
+            self.providers[provider_guid] = self._unknown_provider_tombstone
+            raise EztwProviderException(f"Could not find events for provider {provider_guid}")
 
     def get_provider_by_name(self, provider_name: str) -> EztwProvider:
-        with self.lock:
-            provider_guid = self.provider_guid_by_name.get(canonize_provider_name(provider_name))
-            if not provider_guid:
-                raise EztwProviderException(f"Could not find locally registered provider named {provider_name}")
+        provider_guid = self.provider_guid_by_name.get(canonize_provider_name(provider_name))
+        if not provider_guid:
+            raise EztwProviderException(f"Could not find locally registered provider named {provider_name}")
         return self.get_provider_by_guid(provider_guid)
 
     def get_provider(self, guid_or_name: str) -> EztwProvider:
@@ -223,7 +217,7 @@ def get_provider_config(events: Union[EztwEvent, list[EztwEvent]],
             by_provider_guid[provider_guid] = 0xffffffffffffffff
     return [EztwProviderConfig(guid, keywords, level) for guid, keywords in by_provider_guid.items()]
 
-def add_manual_provider(provider_guid: str, provider_name: str, provider_events: list[TdhEvent]):
+def add_manual_provider(provider_guid: str, provider_name: str, provider_events: list[EventMetadata]):
     """
     Manually add a new provider (potentially overwriting existing one with identical GUID/name)
 

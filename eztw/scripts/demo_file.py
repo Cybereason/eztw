@@ -186,16 +186,16 @@ class FileEventsConsumer:
         provider = get_provider("Microsoft-Windows-Kernel-File")
 
         # Instantiate a dispatcher for the callbacks
-        dispatcher = EztwDispatcher([
-            (provider.Event_Create_12, self.onFileOpen),
-            (provider.Event_Close_14, self.onFileClose),
-            (provider.Event_Read_15, self.onFileRead),
-            (provider.Event_Write_16, self.onFileWrite),
-            (provider.Event_SetInformation_17, self.onFileSetInformation),
-            (provider.Event_DeletePath_26, self.onFileDelete),
-            (provider.Event_RenamePath_27, self.onFileRename),
-            (provider.Event_CreateNewFile_30, self.onFileCreateNew),
-        ])
+        dispatcher = EztwDispatcher({
+            provider.Event_Create_12: self.onFileOpen,
+            provider.Event_Close_14: self.onFileClose,
+            provider.Event_Read_15: self.onFileRead,
+            provider.Event_Write_16: self.onFileWrite,
+            provider.Event_SetInformation_17: self.onFileSetInformation,
+            provider.Event_DeletePath_26: self.onFileDelete,
+            provider.Event_RenamePath_27: self.onFileRename,
+            provider.Event_CreateNewFile_30: self.onFileCreateNew,
+        })
 
         # Consume events forever
         LOGGER.info("Consuming file events...")

@@ -53,7 +53,8 @@ def main():
                     parsed_event = parse_event(event_record)
                     # Print only queries performed to this domain (python.org)
                     if dns_query in parsed_event.QueryName:
-                        print(f"Process PID {event_record.process_id} performed DNS query:")
+                        print(f"{time.ctime(event_record.timestamp)} PID {event_record.process_id} "
+                              f"performed DNS query:")
                         print(parsed_event)
 
 if __name__ == "__main__":

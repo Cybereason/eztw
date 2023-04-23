@@ -1,9 +1,9 @@
 """
-Implementation of EztwController, which allows starting & stopping trace sessions, as well as
+Implementation of EztwController, which allows starting and stopping trace sessions, as well as
 enabling providers.
 
 Note: there are some advanced options when enabling providers (kernel-side filters, stack trace, etc.).
-These are not currently supported.
+These are not yet supported.
 """
 import ctypes
 import winerror
@@ -13,12 +13,13 @@ from typing import Union
 from .guid import GUID
 from .log import LOGGER
 from .common import UCHAR, ULONG, ULONGLONG, LARGE_INTEGER, ULARGE_INTEGER, LPVOID, LPWSTR, HANDLE, \
-    ADVAPI32_DLL, TRACEHANDLE, as_list, EztwException
+    as_list, EztwException
+from .trace_common import ADVAPI32_DLL, TRACEHANDLE
 from .provider import EztwProviderConfig
 
 
 class EztwControllerException(EztwException):
-    """A controller error"""
+    """A trace controller error"""
 
 
 ########
@@ -154,7 +155,7 @@ class TraceProperties:
 
 class EztwController:
     """
-    Create and manage a real-time trace session, enable providers
+    Create and manage a real-time trace session, as well as enable providers by config.
     """
     def __init__(self, session_name: str, providers_config: Union[EztwProviderConfig, list[EztwProviderConfig]]):
         """
@@ -164,6 +165,7 @@ class EztwController:
         self.session_handle = None
         self.session_name = session_name
         self.providers_config = as_list(providers_config)
+        assert self.providers_config  # Make sure we have at least one provider
 
     def __del__(self):
         self.stop()

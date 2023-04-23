@@ -56,3 +56,9 @@ class GUID(ctypes.Structure):
                f"{d[2]:02x}{d[3]:02x}{d[4]:02x}{d[5]:02x}{d[6]:02x}{d[7]:02x}}}"
 
     __repr__ = __str__
+
+def canonize_GUID(guid_str: str) -> str:
+    """
+    Given a potentially-valid GUID string, canonize it into canonic GUID string.
+    """
+    return str(GUID(guid_str))

@@ -20,15 +20,16 @@
 **Eztw** provides a simple and intuitive way of using ETW ([Event Tracing for Windows](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/event-tracing-for-windows--etw-)).
 
 While this documentation assumes some familiarity with ETW and its concepts, here's the gist of the technology:
-+ **Trace providers** emit **event records**, each with its own content and context. A trace provider is any piece of code which registers as such, but can usually be found in various OS modules.
-+ All event records share the same header, but their content and context are determined by the provider through a **schema** (usually an XML manifest) which describes the emitted events and their fields.
-+ **Trace sessions** are created and modified by **trace controllers**. These are "channels" that determine which events to consume from which trace providers. Trace sessions are either "real-time" (i.e: can be consumed using the API) or write to files. Anyone may consume real-time sessions as long as they have the right permissions.
-+ To enable a provider in a trace session, the trace controller must use **keywords**. These are simply bitmasks defined by the provider which allow to control which events are received. Some providers have multiple keywords, some are "all-or-nothing".
-+ **Trace consumers** are processes which consume events from a trace session. By using the API it's possible to receive event records. Their contents can then be parsed further according to the provider's schema. Event records will be received by the consumers about 2-3 seconds after their trigger (which makes them *near-real-time*).
-+ Trace events' content fields are described by templates in the provider's schema. These hold lists of fields of several possible [types](https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-_tdh_in_type).
++ **Trace providers** emit **event records** during specific operations. A trace provider is any piece of code which registers as such, but can usually be found in various OS modules.
++ All event records share the same header, but their content and context are determined by the provider through a **schema** (usually an XML manifest) which describes the emitted events and their fields. Each event may have multiple versions, each with potentially different fields.
++ **Trace sessions** are created and modified by **trace controllers**. These sessions are "channels" that determine which events are filtered and from which trace providers. Trace sessions are either "real-time" (i.e: can be consumed using the API) or write to files. Anyone may consume real-time sessions as long as they have the right permissions.
++ To enable a provider in a trace session, the trace controller must use **keywords**. These are bitmasks defined by each provider which allow to control which events are received. Some providers have multiple keywords, some are all-or-nothing.
++ **Trace consumers** are processes which consume events from a trace session. By using the API it's possible to receive event records. Their contents can then be parsed further according to the provider's schema. Event records will be received by the consumers about 2-3 seconds after their triggering by the provider (which makes them *near-real-time*).
++ Trace events' context and content fields are described by templates in the provider's schema. These hold lists of fields of several possible [types](https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-_tdh_in_type).
 
-This whole process is very cumbersome and requires combining multiple API sets, some of them are painful to use.
+This process is very cumbersome and requires combining multiple API sets, some of them painful to use.
 The aim of the **eztw** package is to take care of all this hassle behind the scenes.
+
 In its core, **eztw** does four things:
 + Automatically get trace provider information and event templates.
 + Control trace sessions (start, stop, enable providers).
@@ -39,14 +40,15 @@ In its core, **eztw** does four things:
 + Windows 10 and above.
 + Python 3.9 and above.
 + Only real-time trace sessions supported.
-+ Not all trace providers supported automatically (many undocumented providers exist, can be added manually).
-+ No support (yet) for advanced features (stack-trace, kernel-side filters, etc.).
++ Not all trace providers supported automatically (many undocumented providers exist, which can be added [manually](#manually-adding-new-providers)).
++ No old-style (MOF) providers supported for now, only new-style (i.e: XML manifest obtained via the TDH API).
++ No support (yet) for advanced features, such as stack-trace, kernel-side filters, etc.
 
 ## Usage
 
 ### Trace providers and event templates
 
-While understanding which providers and events exist is not always simple (see the section about [exploring providers and events](#exploring-providers-and-events)), once we know which events to use, the rest is easy!
+While understanding which providers and events to consume is not always simple (see the section about [exploring providers and events](#exploring-providers-and-events)), once we know which events to use, the rest is easy!
 
 Let's say we want to get events for any new process starting on the local machine.
 The provider we want is [Microsoft-Windows-Kernel-Process](https://github.com/repnz/etw-providers-docs/blob/master/Manifests-Win10-17134/Microsoft-Windows-Kernel-Process.xml), who's GUID is {22FB2CD6-0E7B-422B-A0C7-2FAD1FD0E716}.
@@ -62,14 +64,14 @@ print(provider)
 # EztwProvider(guid={22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}, name='Microsoft-Windows-Kernel-Process', 26 events)
 ```
 
-Note again that the GUID string is not case sensitive, and neither are the provider names.
-Internally, **eztw** converts spaces and hyphens in provider names to underscores, so "Microsoft-Windows-Kernel-Process" is equivalent to "microsoft_windows kernel_process".
+Notice that the GUID string is case-insensitive, and so are the provider names.
+Internally, **eztw** converts spaces, hyphens and other non-characters in provider names to underscores, so "Microsoft-Windows-Kernel-Process" is equivalent to "microsoft_windows kernel_process".
 
 ```python
 assert get_provider("{22FB2CD6-0E7B-422B-A0C7-2FAD1FD0E716}") is \
        get_provider("22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716") is \
        get_provider("Microsoft-Windows-Kernel-Process") is \
-       get_provider("microsoft_windows kernel process")
+       get_provider("microsoft windows kernel process")
 ```
 
 The **EztwProvider** instance keeps all the information required to start consuming and parsing events from the associated trace provider.
@@ -135,11 +137,11 @@ Some do not have any locally registered description, but can be added manually (
 ### Trace controller and consumer
 
 Let's create a new session and consume it.
-One of the ways of doing so is using the **EztwController** and **EztwConsumer** classes (not that there are even [easier ways](#eztw-simplified)!).
+One of the ways of doing so is using the **EztwController** and **EztwConsumer** classes (note that there are even [easier ways](#eztw-simplified)!).
 
 To start a new session we need two things:
 + A name for the session (*coming up with a good session name is often the hard part!*).
-+ A list of zero-or-more trace provider configuration to enable, each consisting of:
++ A list of one or more trace provider configuration to enable, each consisting of:
   + The provider's GUID.
   + Keyword bitmask for all desired events (indicates which events to filter).
   + Verbosity level (defaults to TRACE_LEVEL_VERBOSE, the most verbose).
@@ -175,7 +177,7 @@ Notes:
 + **EztwConsumer** is iterable and yields **EventRecord** objects. When iterated, it runs forever (or until the session is externally closed, or pressing Ctrl+C). There are other, non-blocking ways of consuming events.
 + Instead of using the 'with' syntax, it's possible to manually call the **start** and **stop** methods of both controller and consumer.
 + If a trace session is stopped externally (for example using the *logman.exe* tool), the iteration will stop automatically.
-+ It's also possible to consume a pre-existing session (without closing it at the end, of course).
++ It's also possible to consume a pre-existing session (without stopping it at the end, of course - it will continue to exist).
 + There are easier ways of getting the configuration parameters and consuming the trace session (keep reading!).
 
 ```python
@@ -189,7 +191,7 @@ enable_logging()
 LOGGER.info("visible2")
 ```
 
-Now let's start a new process - a few seconds later **EventRecord** begin to appear:
+Now let's start a new process - a few seconds later **EventRecord** objects begin to appear:
 
 ```
 EventRecord(provider_guid={22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}, id=1, version=3, process_id=22824, timestamp=Thu Mar 23 19:46:07 2023)
@@ -198,10 +200,10 @@ EventRecord(provider_guid={22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}, id=2, version=
 EventRecord(provider_guid={22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}, id=2, version=2, process_id=43272, timestamp=Thu Mar 23 19:46:07 2023)
 ```
 
-**EventRecord** objects have properties that are shared by all ETW events (see [EVENT_RECORD](https://learn.microsoft.com/en-us/windows/win32/api/evntcons/ns-evntcons-event_record)).
+**EventRecord** objects have properties that exist in all ETW events (see [EVENT_RECORD](https://learn.microsoft.com/en-us/windows/win32/api/evntcons/ns-evntcons-event_record)).
 These include:
 + provider_guid: GUID
-+ id: int
++ id: int (event ID in the context of the provider)
 + version: int (each version can have different fields)
 + keywords: int (the provider-defined bitmask which filtered this event)
 + process_id: int (source process of this event)
@@ -240,7 +242,7 @@ MandatoryLabel=b'\x01\x01\x00\x00\x00\x00\x00\x10\x00 \x00\x00', ImageName='\\De
 ImageChecksum=228225, TimeDateStamp=109848115, PackageFullName='', PackageRelativeAppId='')
 ```
 
-This *dataclass* already contains all the parsed fields of the event, based on the correct version template, and can be used as-is.
+This event template already contains all the parsed fields of the event, based on the correct version template, and can be used as-is.
 The same is true for any other event of a locally registered trace provider - they can be parsed automatically (yet efficiently) and used with the same field names described in the provider's schema.
 
 ```python
@@ -264,7 +266,7 @@ with EztwController(session_name, config):
         print(f"Trying to get next event or until timeout: {ezc.get_event(timeout=5)}")
         # Aggregate all events until timeout and return them as a list of EventRecords
         print("Collecting events for a few seconds...")
-        event_records = ezc.wait_for_events(timeout=5)
+        event_records = ezc.wait_for_events(how_long=5)
         print(f"Collected {len(event_records)} events")
 ```
 
@@ -318,8 +320,8 @@ import time
 # consume_events yields pairs of (EventRecord, EventTemplate)
 for event_record, parsed_event in consume_events([provider.Event_ProcessStart_1]):
     # Filter only events for newly started notepads
-    if "notepad.exe" in parsed_event.ImageName.lower():
-        print(f"{time.ctime(event_record.timestamp)} new notepad.exe started with PID {parsed_event.ProcessID}")
+    if parsed_event.ImageName.lower().endswith("notepad.exe"):
+        print(f"{time.ctime(event_record.timestamp)} new notepad.exe with PID {parsed_event.ProcessID}")
 ```
 
 The **consume_events** function does several things:
@@ -371,8 +373,12 @@ ezf = EztwFilter(provider.Event_ProcessStart_1)
 #   ...
 ```
 
-**EztwDispatcher** is similar but initialized by a list of pairs of **EztwEvent** objects and their dispatched callables.
-Then, given **EventRecord** instances, it can be used to dispatch the correct callable (the event record and parsed fields are passed as parameters to this function):
+**EztwDispatcher** is similar but initialized from a dict that maps from **EztwEvent** objects to their callbacks.
+Then, given **EventRecord** instances, it can be used to dispatch the correct callable.
+The callback function must accept exactly two arguments - the event record and parsed event.
+The parsed event can be parsed manually using the appropriate EztwEvent instance or automatically using the **parse_event** function.
+It is also yielded from **consume_events** and from **EztwSessionIterator**.
+For added simplicity, the **events** member of the dispatcher is a list of the EztwEvents (keys) that can be passed as filter for consume_events and EztwSessionIterator. 
 
 ```python
 from eztw import EztwDispatcher
@@ -382,11 +388,11 @@ def some_callback(event_record, parsed_event):
     print(event_record)
     print(parsed_event)
 
-ezd = EztwDispatcher([(provider.Event_ProcessStart_1, some_callback)])
+ezd = EztwDispatcher({provider.Event_ProcessStart_1: some_callback})
 
 # Now given an event_record of type EventRecord and its parsed fields (parsed_event),
 # call the callback function by simply passing it the event record and parsed fields:
-for event_record, parsed_event in consume_events(provider.Event_ProcessStart_1):
+for event_record, parsed_event in consume_events(ezd.events):
     ezd(event_record, parsed_event)
 ```
 
@@ -462,7 +468,7 @@ provider.Event_ImageLoad_5.print()
 #                 ImageName: INTYPE_UNICODESTRING
 ```
 
-*Advice: to visually explore local trace providers and their specific events, a tool such as [EtwExplorer](https://github.com/zodiacon/EtwExplorer) is recommended.*
+*Advice: to visually explore local trace providers and their specific events, a tool such as [EtwExplorer](https://github.com/zodiacon/EtwExplorer) by @zodiacon is recommended.*
 
 ## Manually adding new providers
 
@@ -474,25 +480,25 @@ This does mean manually constructing *each and every* field of *each and every* 
 Here's an example for a simple provider with a single event which has two versions:
 
 ```python
-from eztw.tdh import TdhEvent, TdhEventField, TDH_INTYPE
+from eztw.tdh import EventMetadata, EventFieldMetadata, EVENT_FIELD_INTYPE
 
 provider_guid = "{03020100-0504-0706-0809-0a0b0c0d0e0f}"
 provider_name = "My New Provider"
 events = [
-    # ID 123, version 0
-    TdhEvent(provider_guid, 123, 0, "My event", 0x100, # Keyword
-        # Fields
-        [
-             TdhEventField("field1", TDH_INTYPE.INTYPE_INT32),
-        ]
-    ),
-    # ID 123, version 1
-    TdhEvent(provider_guid, 123, 1, "My event", 0x100,
-        [
-            TdhEventField("field1", TDH_INTYPE.INTYPE_INT32),
-            TdhEventField("field2", TDH_INTYPE.INTYPE_ANSISTRING),
-        ]
-    ),
+  # ID 123, version 0
+  EventMetadata(provider_guid, 123, 0, "My event", 0x100,  # Keyword
+                # Fields
+                [
+                  EventFieldMetadata("field1", EVENT_FIELD_INTYPE.INTYPE_INT32),
+                ]
+                ),
+  # ID 123, version 1
+  EventMetadata(provider_guid, 123, 1, "My event", 0x100,
+                [
+                  EventFieldMetadata("field1", EVENT_FIELD_INTYPE.INTYPE_INT32),
+                  EventFieldMetadata("field2", EVENT_FIELD_INTYPE.INTYPE_ANSISTRING),
+                ]
+                ),
 ]
 ```
 

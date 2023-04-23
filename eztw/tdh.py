@@ -11,12 +11,11 @@ tdh_get_provider_events:
 """
 import ctypes
 import winerror
-from enum import Enum
 from functools import cache
-from dataclasses import dataclass
-from typing import Optional
 
 from .common import UCHAR, USHORT, ULONG, ULONGLONG, LPVOID, sanitize_name, EztwException
+from .trace_common import EVENT_FIELD_INTYPE, ProviderMetadata, PROVIDER_DECODING_SOURCE, EventMetadata, \
+    EVENT_FIELD_INTYPE_MAX_VALUE, EventFieldMetadata
 from .guid import GUID
 
 
@@ -34,6 +33,7 @@ def read_wstring_at(buf, offset=0):
         raise EztwTdhException("Wchar string out of bounds")
     return ctypes.wstring_at(ctypes.addressof(buf) + offset)
 
+
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-trace_provider_info
 class TRACE_PROVIDER_INFO(ctypes.Structure):
     _fields_ = [('ProviderGuid', GUID),
@@ -41,20 +41,13 @@ class TRACE_PROVIDER_INFO(ctypes.Structure):
                 ('ProviderNameOffset', ULONG),
                 ]
 
+
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-provider_enumeration_info
 class PROVIDER_ENUMERATION_INFO(ctypes.Structure):
     _fields_ = [('NumberOfProviders', ULONG),
                 ('Reserved', ULONG),
                 #('TraceProviderInfoArray', LPVOID), # Ignore array pointer
                 ]
-
-# https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-decoding_source
-class TDH_DECODING_SOURCE(Enum):
-    DecodingSourceXMLFile = 0
-    DecodingSourceWbem = 1
-    DecodingSourceWPP = 2
-    DecodingSourceTlg = 3
-    DecodingSourceMax = 4
 
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/nf-tdh-tdhenumerateproviders
 TdhEnumerateProviders = ctypes.WINFUNCTYPE(
@@ -78,6 +71,7 @@ def iterate_array_of(buf, offset, cls, array_size):
         yield cls.from_buffer_copy(buf[cur_idx:new_idx])
         cur_idx = new_idx
 
+
 # https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_descriptor
 class EVENT_DESCRIPTOR(ctypes.Structure):
     _fields_ = [('Id', USHORT),
@@ -88,6 +82,7 @@ class EVENT_DESCRIPTOR(ctypes.Structure):
                 ('Task', USHORT),
                 ('Keyword', ULONGLONG),
                 ]
+
 
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-trace_event_info
 class TRACE_EVENT_INFO(ctypes.Structure):
@@ -113,12 +108,14 @@ class TRACE_EVENT_INFO(ctypes.Structure):
                 #('EventPropertyInfoArray', LPVOID), # Ignore array pointer
                 ]
 
+
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-provider_event_info
 class PROVIDER_EVENT_INFO(ctypes.Structure):
     _fields_ = [('NumberOfEvents', ULONG),
                 ('Reserved', ULONG),
                 #('EventDescriptorsArray', LPVOID), # Ignore array pointer
                 ]
+
 
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-property_flags
 class TDH_PROPERTY_FLAGS:
@@ -131,12 +128,14 @@ class TDH_PROPERTY_FLAGS:
     PropertyHasTags = 0x40
     PropertyHasCustomSchema = 0x80
 
+
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-event_property_info
 class EVENT_PROPERTY_INFO_UNION(ctypes.Structure):
     _fields_ = [('InType', USHORT),
                 ('OutType', USHORT),
                 ('MapNameOffset', ULONG),
                 ]
+
 
 class EVENT_PROPERTY_INFO(ctypes.Structure):
     _fields_ = [('Flags', ULONG),
@@ -146,49 +145,6 @@ class EVENT_PROPERTY_INFO(ctypes.Structure):
                 ('length', USHORT),     # Can also be lengthPropertyIndex
                 ('Reserved', ULONG),    # Can also be Tags
                 ]
-
-# https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-_tdh_in_type
-class TDH_INTYPE(Enum):
-    INTYPE_NULL = 0
-    INTYPE_UNICODESTRING = 1
-    INTYPE_ANSISTRING = 2
-    INTYPE_INT8 = 3
-    INTYPE_UINT8 = 4
-    INTYPE_INT16 = 5
-    INTYPE_UINT16 = 6
-    INTYPE_INT32 = 7
-    INTYPE_UINT32 = 8
-    INTYPE_INT64 = 9
-    INTYPE_UINT64 = 10
-    INTYPE_FLOAT = 11
-    INTYPE_DOUBLE = 12
-    INTYPE_BOOLEAN = 13
-    INTYPE_BINARY = 14
-    INTYPE_GUID = 15
-    INTYPE_POINTER = 16
-    INTYPE_FILETIME = 17
-    INTYPE_SYSTEMTIME = 18
-    INTYPE_SID = 19
-    INTYPE_HEXINT32 = 20
-    INTYPE_HEXINT64 = 21
-    INTYPE_MANIFEST_COUNTEDSTRING = 22
-    INTYPE_MANIFEST_COUNTEDANSISTRING = 23
-    INTYPE_RESERVED24 = 24
-    INTYPE_MANIFEST_COUNTEDBINARY = 25
-    INTYPE_COUNTEDSTRING = 26
-    INTYPE_COUNTEDANSISTRING = 27
-    INTYPE_REVERSEDCOUNTEDSTRING = 28
-    INTYPE_REVERSEDCOUNTEDANSISTRING = 29
-    INTYPE_NONNULLTERMINATEDSTRING = 30
-    INTYPE_NONNULLTERMINATEDANSISTRING = 31
-    INTYPE_UNICODECHAR = 32
-    INTYPE_ANSICHAR = 33
-    INTYPE_SIZET = 34
-    INTYPE_HEXDUMP = 35
-    INTYPE_WBEMSID = 36
-
-# For those sneaky undocumented ones
-TDH_INTYPE_MAX_VALUE = max([x.value for x in TDH_INTYPE.__members__.values()])
 
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/nf-tdh-tdhenumeratemanifestproviderevents
 TdhEnumerateManifestProviderEvents = ctypes.WINFUNCTYPE(
@@ -211,17 +167,8 @@ TdhGetManifestEventInformation = ctypes.WINFUNCTYPE(
 ########
 # Eztw
 
-@dataclass
-class TdhProvider:
-    """
-    Represents the metadata of a single provider - guid, name and "decoding source" (usually XML schema)
-    """
-    guid: str
-    name: str
-    schema: TDH_DECODING_SOURCE
-
 @cache
-def tdh_enumerate_providers() -> list[TdhProvider]:
+def tdh_enumerate_providers() -> list[ProviderMetadata]:
     """
     Invokes TdhEnumerateProviders to get a list of provider metadata. Results are cached.
 
@@ -244,38 +191,16 @@ def tdh_enumerate_providers() -> list[TdhProvider]:
     # Iterate an array of TRACE_PROVIDER_INFO structs
     for trace_provider_info in iterate_array_of(
             buf, ctypes.sizeof(PROVIDER_ENUMERATION_INFO), TRACE_PROVIDER_INFO, pei.NumberOfProviders):
-        schema_source = TDH_DECODING_SOURCE(trace_provider_info.SchemaSource)
+        schema_source = PROVIDER_DECODING_SOURCE(trace_provider_info.SchemaSource)
         # Add new TdhProvider
-        providers.append(TdhProvider(
+        providers.append(ProviderMetadata(
             str(trace_provider_info.ProviderGuid),
             read_wstring_at(buf, trace_provider_info.ProviderNameOffset),
             schema_source))
     return providers
 
-@dataclass
-class TdhEventField:
-    """
-    Represents a single event's field - name, type and optional length/count fields
-    """
-    name: str
-    type: TDH_INTYPE
-    length: Optional[str] = None  # Either the name of the field that holds the byte size of this field, or None
-    count: Optional[str] = None   # Either the name of the field that holds the count of this fild, or None
-
-@dataclass
-class TdhEvent:
-    """
-    Represents a single event - provider GUID, ID, version, name (optional), keyword and a list of TdhEventField
-    """
-    provider_guid: str
-    id: int
-    version: int
-    name: str
-    keyword: int
-    fields: list[TdhEventField]
-
 @cache
-def tdh_get_provider_events(provider_guid: str) -> list[TdhEvent]:
+def tdh_get_provider_events(provider_guid: str) -> list[EventMetadata]:
     """
     Given a provider's GUID attempts to return a list of TdhEvent for this provider using the TDH API.
     Note that each version of each event is represented as an independent TdhEvent.
@@ -364,13 +289,13 @@ def tdh_get_provider_events(provider_guid: str) -> list[TdhEvent]:
                         f"Provider {provider_guid} - {event_name} count field index too high")
                 count_field = fields[count_index].name
             # TODO: check other (currently unsupported) flags?
-            assert count_field is None or length_field is None # They can't be both used at the same time...
+            assert count_field is None or length_field is None  # They can't be both used at the same time...
             # Field type ("intype") - if unknown, keep the integer value
             intype_value = event_property_info.Union.InType
-            if intype_value <= TDH_INTYPE_MAX_VALUE:
-                intype_value = TDH_INTYPE(intype_value)
+            if intype_value <= EVENT_FIELD_INTYPE_MAX_VALUE:
+                intype_value = EVENT_FIELD_INTYPE(intype_value)
             # Append field
-            fields.append(TdhEventField(field_name, intype_value, length_field, count_field))
+            fields.append(EventFieldMetadata(field_name, intype_value, length_field, count_field))
         # Append event
-        events.append(TdhEvent(provider_guid, event_id, event_version, event_name, event_keyword, fields))
+        events.append(EventMetadata(provider_guid, event_id, event_version, event_name, event_keyword, fields))
     return events

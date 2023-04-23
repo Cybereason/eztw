@@ -13,7 +13,8 @@ from typing import Optional
 from .log import LOGGER
 from .guid import GUID
 from .common import UCHAR, USHORT, ULONG, LPWSTR, LARGE_INTEGER, ULARGE_INTEGER, LPVOID, LONG, WCHAR, FILETIME,\
-    FILETIME_to_time, ADVAPI32_DLL, TRACEHANDLE, EztwException
+    FILETIME_to_time, EztwException
+from .trace_common import ADVAPI32_DLL, TRACEHANDLE, INVALID_TRACE_HANDLE
 
 
 class EztwConsumerException(EztwException):
@@ -26,9 +27,6 @@ class EztwConsumerException(EztwException):
 # https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_logfilea
 PROCESS_TRACE_MODE_REAL_TIME = 0x00000100
 PROCESS_TRACE_MODE_EVENT_RECORD = 0x10000000
-
-# This indicates an invalid trace handle
-INVALID_TRACE_HANDLE = 0xffffffffffffffff
 
 # https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_header
 class EVENT_TRACE_HEADER_CLASS(ctypes.Structure):
@@ -210,7 +208,7 @@ CloseTrace = ctypes.WINFUNCTYPE(
 
 class EventRecord:
     """
-    A single ETW event record (i.e: new style), shared by all ETW events
+    A single ETW event record, with header fields shared by all ETW events.
     """
     def __init__(self, event_record: EVENT_RECORD, is_64bit: bool):
         self.is_64bit = is_64bit
@@ -237,10 +235,15 @@ class EventRecord:
 
     __repr__ = __str__
 
+    def __hash__(self):
+        """The event is uniquely identified via its provider GUID and event ID"""
+        return hash((self.provider_guid, self.id))
+
 
 class EztwConsumer:
     """
-    Real-time consumer of an existing ETW trace, by name
+    Real-time consumer of an existing ETW trace.
+    Simply provider an existing session name.
     """
     def __init__(self, session_name: str):
         self.session_handle = None
@@ -268,8 +271,8 @@ class EztwConsumer:
         # Create and initialize EVENT_TRACE_LOGFILE
         logfile = EVENT_TRACE_LOGFILE()
         logfile.LoggerName = self.session_name
-        logfile.ProcessTraceMode = PROCESS_TRACE_MODE_REAL_TIME
-        logfile.ProcessTraceMode |= PROCESS_TRACE_MODE_EVENT_RECORD
+        # This session must be real-time. Event records are to be consumed (i.e: "new-style", Vista and above)
+        logfile.ProcessTraceMode = PROCESS_TRACE_MODE_REAL_TIME | PROCESS_TRACE_MODE_EVENT_RECORD
         logfile.BufferCallback = self._buffer_callback
         logfile.EventCallback.EventRecordCallback = self._event_record_callback
         # Attempt to open an existing trace session
@@ -356,16 +359,16 @@ class EztwConsumer:
         except queue.Empty:
             return None
 
-    def wait_for_events(self, timeout: float = 1) -> list[EventRecord]:
+    def wait_for_events(self, how_long: float) -> list[EventRecord]:
         """
         Read all currently available events and optionally wait some more for new events
 
-        @param timeout: time to wait in seconds
+        @param how_long: time to wait in seconds
         @return: list of EventRecord
         """
         start_time = time.time()
         events = []
-        while (remaining_time := (start_time + timeout - time.time())) > 0:
+        while (remaining_time := (start_time + how_long - time.time())) > 0:
             try:
                 events.append(self.events_queue.get(timeout=remaining_time))
             except queue.Empty:
@@ -374,7 +377,8 @@ class EztwConsumer:
 
     def __iter__(self):
         """
-        Iterate over all events forever (or until stopped)
+        Iterate over all events forever (or until stopped).
+        If the session is externally closed (for example, using the logman.exe tool), the iteration stops.
         """
         while True:
             if self.stop_event.is_set():

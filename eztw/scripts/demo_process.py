@@ -48,11 +48,11 @@ def main():
 
     process_tracker = ProcessTracker()
     # Initialize EztwDispatcher that maps from the desired events to their callbacks
-    events_dispatcher = EztwDispatcher([
-        (provider.Event_ProcessStart_1, process_tracker.on_process_start),
-        (provider.Event_ProcessStop_2, process_tracker.on_process_stop),
-        (provider.Event_ImageLoad_5, process_tracker.on_image_load),
-    ])
+    events_dispatcher = EztwDispatcher({
+        provider.Event_ProcessStart_1: process_tracker.on_process_start,
+        provider.Event_ProcessStop_2: process_tracker.on_process_stop,
+        provider.Event_ImageLoad_5: process_tracker.on_image_load,
+    })
 
     # Create a delayed thread that starts and stops a new notepad.exe
     process_delay = 3  # Seconds
