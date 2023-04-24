@@ -9,6 +9,7 @@ import functools
 from collections import OrderedDict
 from dataclasses import make_dataclass
 from typing import Union, Callable
+import keyword as python_keywords
 
 from .common import FILETIME_to_time, EztwException, as_list, sanitize_name
 from .guid import GUID
@@ -40,26 +41,38 @@ class FieldsReader:
         self.cur_offset += size
         return res
 
-    def consume_BYTE(self):
-        return self.consume(1)[0]
+    def consume_INT8(self):
+        return struct.unpack("b", self.consume(1))[0]
 
-    def consume_USHORT(self):
+    def consume_UINT8(self):
+        return struct.unpack("B", self.consume(1))[0]
+
+    def consume_INT16(self):
+        return struct.unpack("<h", self.consume(2))[0]
+
+    def consume_UINT16(self):
         return struct.unpack("<H", self.consume(2))[0]
 
-    def consume_ULONG(self):
+    def consume_INT32(self):
+        return struct.unpack("<i", self.consume(4))[0]
+
+    def consume_UINT32(self):
         return struct.unpack("<I", self.consume(4))[0]
 
-    def consume_ULONGLONG(self):
+    def consume_INT64(self):
+        return struct.unpack("<q", self.consume(8))[0]
+
+    def consume_UINT64(self):
         return struct.unpack("<Q", self.consume(8))[0]
 
     def consume_POINTER(self):
         if self.is_64bit:
-            return self.consume_ULONGLONG()
+            return self.consume_UINT64()
         else:
-            return self.consume_ULONG()
+            return self.consume_UINT32()
 
     def consume_FILETIME(self):
-        return FILETIME_to_time(self.consume_ULONGLONG())
+        return FILETIME_to_time(self.consume_UINT64())
 
     def consume_SYSTEMTIME(self):
         # TODO: parse as SYSTEMTIME
@@ -77,7 +90,7 @@ class FieldsReader:
         return res
 
     def consume_BOOLEAN(self):
-        return bool(self.consume_ULONG())
+        return bool(self.consume_UINT32())
 
     def consume_FLOAT(self):
         return struct.unpack("f", self.consume(4))[0]
@@ -96,16 +109,16 @@ class FieldsReader:
         return str(GUID.from_buffer_copy(self.consume(16)))
 
     INTYPE_TO_CONSUMER = {
-        EVENT_FIELD_INTYPE.INTYPE_INT8: consume_BYTE,
-        EVENT_FIELD_INTYPE.INTYPE_UINT8: consume_BYTE,
-        EVENT_FIELD_INTYPE.INTYPE_INT16: consume_USHORT,
-        EVENT_FIELD_INTYPE.INTYPE_UINT16: consume_USHORT,
-        EVENT_FIELD_INTYPE.INTYPE_INT32: consume_ULONG,
-        EVENT_FIELD_INTYPE.INTYPE_UINT32: consume_ULONG,
-        EVENT_FIELD_INTYPE.INTYPE_HEXINT32: consume_ULONG,
-        EVENT_FIELD_INTYPE.INTYPE_INT64: consume_ULONGLONG,
-        EVENT_FIELD_INTYPE.INTYPE_UINT64: consume_ULONGLONG,
-        EVENT_FIELD_INTYPE.INTYPE_HEXINT64: consume_ULONGLONG,
+        EVENT_FIELD_INTYPE.INTYPE_INT8: consume_INT8,
+        EVENT_FIELD_INTYPE.INTYPE_UINT8: consume_UINT8,
+        EVENT_FIELD_INTYPE.INTYPE_INT16: consume_INT16,
+        EVENT_FIELD_INTYPE.INTYPE_UINT16: consume_UINT16,
+        EVENT_FIELD_INTYPE.INTYPE_INT32: consume_INT32,
+        EVENT_FIELD_INTYPE.INTYPE_UINT32: consume_UINT32,
+        EVENT_FIELD_INTYPE.INTYPE_HEXINT32: consume_UINT32,
+        EVENT_FIELD_INTYPE.INTYPE_INT64: consume_INT64,
+        EVENT_FIELD_INTYPE.INTYPE_UINT64: consume_UINT64,
+        EVENT_FIELD_INTYPE.INTYPE_HEXINT64: consume_UINT64,
         EVENT_FIELD_INTYPE.INTYPE_POINTER: consume_POINTER,
         EVENT_FIELD_INTYPE.INTYPE_BOOLEAN: consume_BOOLEAN,
         EVENT_FIELD_INTYPE.INTYPE_FILETIME: consume_FILETIME,
@@ -134,13 +147,15 @@ class EztwEvent:
     def __init__(self, event_descriptors: list[EventMetadata]):
         # This instance is initialized from a list of TdhEvent descriptors, so for sanity
         # make sure there's at least one, and they all share the same provider GUID, id, name and keyword
-        assert(len(event_descriptors) >= 1)
+        assert len(event_descriptors) >= 1
         self.provider_guid = event_descriptors[0].provider_guid
-        assert(all(ed.provider_guid == self.provider_guid for ed in event_descriptors))
+        assert all(ed.provider_guid == self.provider_guid for ed in event_descriptors)
         self.id = event_descriptors[0].id
-        assert (all(ed.id == self.id for ed in event_descriptors))
+        assert all(ed.id == self.id for ed in event_descriptors)
         self.name = event_descriptors[0].name
-        assert (all(ed.name == self.name for ed in event_descriptors))
+        if not all(ed.name == self.name for ed in event_descriptors):
+            # Take the latest name...
+            self.name = event_descriptors[-1].name
         self.keyword = 0
         # Sort the descriptors by their version, and create a template for their parsed fields
         self.versions = {}
@@ -149,20 +164,33 @@ class EztwEvent:
             # Note that sometimes different versions of the same event have different keywords...
             # Aggregate them just to be on the safe side
             self.keyword |= event_descriptor.keyword
+            # Make sure that none of the field names is accidentally also a reserved Python keyword
+            # If so - append an underscore at the end
+            field_names = []
+            for field in event_descriptor.fields:
+                if python_keywords.iskeyword(field.name):
+                    field_names.append(field.name+"_")
+                else:
+                    field_names.append(field.name)
             self.versions[event_descriptor.version] = (
                 event_descriptor.fields,
-                make_dataclass(template_name, [f.name for f in event_descriptor.fields])
+                make_dataclass(template_name, field_names)
             )
 
-    def string_details(self) -> str:
+    def string_details(self, indent=0) -> str:
         """
         @return: a nice representation of the event's versions and fields
         """
-        res = [f"Event ID={self.id} ({self.name})"]
+        indent_str = "\t"*indent
+        res = [f"{indent_str}Event ID={self.id} ({self.name})"]
         for version, (fields, _template) in sorted(self.versions.items()):
-            res.append(f"\tVersion {version}:")
+            res.append(f"{indent_str}\tVersion {version}:")
             for field in fields:
-                res.append(f"\t\t{field.name}: {field.type.name}")
+                if isinstance(field.type, EVENT_FIELD_INTYPE):
+                    type_name = field.type.name
+                else:
+                    type_name = f"Unknown type {field.type}"
+                res.append(f"{indent_str}\t\t{field.name}: {type_name}")
         return '\n'.join(res)
 
     def print(self):
@@ -178,8 +206,8 @@ class EztwEvent:
         # Sanity - verify provider GUID, ID and version
         # (usually this function is called by EztwProvider, so the parameters are already correct)
         # However, if this is called directly we need to make sure...
-        assert(event_record.provider_guid == self.provider_guid)
-        assert(event_record.id == self.id)
+        assert event_record.provider_guid == self.provider_guid
+        assert event_record.id == self.id
         if event_record.version not in self.versions:
             raise EztwEventParseException(f"Unknown version {event_record.version} for event "
                                           f"{event_record.id} of provider {event_record.provider_guid}")
@@ -187,27 +215,27 @@ class EztwEvent:
         event_fields, event_template = self.versions[event_record.version]
         # Maintain the order of the parsed fields
         field_values = OrderedDict()
+        # Initialize a new data consumer
         data_consumer = FieldsReader(event_record.data, event_record.is_64bit)
         for field in event_fields:
             # https://docs.microsoft.com/en-us/windows/win32/wes/eventmanifestschema-inputtype-complextype
             # If there's a 'length' field, either read this amount of bytes (if length is int) or the variable
             # length is stored in a previous field (if length is str)
-            if field.length:
-                if isinstance(field.length, int):
-                    length_value = field.length
+            if field.length is not None:
+                length_value = field_values.get(field.length) if not isinstance(field.length, int) else field.length
+                # If the 'count' field is also not None, read the same length multiple times
+                if field.count is not None:
+                    count_value = field_values.get(field.count) if not isinstance(field.count, int) else field.count
+                    field_values[field.name] = [data_consumer.consume(length_value) for _ in range(count_value)]
+                # Otherwise - simpy read length_value raw bytes
                 else:
-                    length_value = field_values.get(field.length)
-                field_values[field.name] = data_consumer.consume(length_value)
-                # This is a special case - no need to read further
+                    field_values[field.name] = data_consumer.consume(length_value)
                 continue
             consumer_function = data_consumer.consumer_by_type(field.type)
             # If there's a 'count' field, it means there's an array of values. The count may either be fixed (int)
             # or a name of a previous field that holds the count
-            if field.count:
-                if isinstance(field.count, int):
-                    count_value = field.count
-                else:
-                    count_value = field_values.get(field.count)
+            if field.count is not None:
+                count_value = field_values.get(field.count) if not isinstance(field.count, int) else field.count
                 # Read this many times the field's type
                 field_values[field.name] = [consumer_function() for _ in range(count_value)]
             else:

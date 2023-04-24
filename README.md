@@ -415,7 +415,7 @@ providers[297]
 
 This function returns only the GUIDs and names - to get the **EztwProvider** use **get_provider** as before with either the name or the GUID.
 
-Now, given an EztwProvider, it's also possible to use its **print()** method to quickly view all events and their fields:
+Now, given an EztwProvider, it's also possible to use its **print** method to quickly view all events and their fields:
 
 ```python
 provider = get_provider("{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}")
@@ -425,32 +425,19 @@ provider.print()
 This will result in something similar to:
 
 ```
-Event ID=1 (ProcessStart)
+Provider GUID={22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716} (Microsoft-Windows-Kernel-Process)
+****************************************
+    Event ID=1 (ProcessStart)
         Version 0:
-                ProcessID (INTYPE_UINT32)
-                CreateTime (INTYPE_FILETIME)
-                ParentProcessID (INTYPE_UINT32)
-                SessionID (INTYPE_UINT32)
-                ImageName (INTYPE_UNICODESTRING)
+            ProcessID: INTYPE_UINT32
+            CreateTime: INTYPE_FILETIME
+            ParentProcessID: INTYPE_UINT32
+            SessionID: INTYPE_UINT32
+            ImageName: INTYPE_UNICODESTRING
         Version 1:
-                ProcessID (INTYPE_UINT32)
-                CreateTime (INTYPE_FILETIME)
-                ParentProcessID (INTYPE_UINT32)
-                SessionID (INTYPE_UINT32)
-                Flags (INTYPE_UINT32)
-                ImageName (INTYPE_UNICODESTRING)
-        ...
-Event ID=2 (ProcessStop)
-        Version 0:
-                ProcessID (INTYPE_UINT32)
-                CreateTime (INTYPE_FILETIME)
-                ExitTime (INTYPE_FILETIME)
-                ExitCode (INTYPE_UINT32)
-                TokenElevationType (INTYPE_UINT32)
-                HandleCount (INTYPE_UINT32)
-                CommitCharge (INTYPE_UINT64)
-                CommitPeak (INTYPE_UINT64)
-                ImageName (INTYPE_ANSISTRING)
+            ProcessID: INTYPE_UINT32
+            CreateTime: INTYPE_FILETIME
+            ParentProcessID: INTYPE_UINT32
         ...
 ```
 
@@ -458,14 +445,14 @@ Of course, as mentioned before, each EztwEvent also has its own **print** method
 ```python
 provider.Event_ImageLoad_5.print()
 # Event ID=5 (ImageLoad)
-#         Version 0:
-#                 ImageBase: INTYPE_POINTER
-#                 ImageSize: INTYPE_POINTER
-#                 ProcessID: INTYPE_UINT32
-#                 ImageCheckSum: INTYPE_UINT32
-#                 TimeDateStamp: INTYPE_UINT32
-#                 DefaultBase: INTYPE_POINTER
-#                 ImageName: INTYPE_UNICODESTRING
+#   Version 0:
+#       ImageBase: INTYPE_POINTER
+#       ImageSize: INTYPE_POINTER
+#       ProcessID: INTYPE_UINT32
+#       ImageCheckSum: INTYPE_UINT32
+#       TimeDateStamp: INTYPE_UINT32
+#       DefaultBase: INTYPE_POINTER
+#       ImageName: INTYPE_UNICODESTRING
 ```
 
 *Advice: to visually explore local trace providers and their specific events, a tool such as [EtwExplorer](https://github.com/zodiacon/EtwExplorer) by @zodiacon is recommended.*
@@ -545,6 +532,15 @@ While the [Microsoft-Windows-Kernel-File](https://github.com/repnz/etw-providers
 
 This script tracks any activity relevant to files with "eztw_test" in their names.
 It performs delayed actions on such a temporary file, then waits for the resulting events.
+
+### **dump_providers**
+
+*python -m eztw.scripts.dump_providers [output filename]*
+*python -m eztw.scripts.dump_providers [output filename] events*
+
+This script dumps all registered providers to the output file.
+Without the 'events' qualifier, only the GUIDs and names are written.
+With the 'events' qualifiers, a huge monolithic file is created which includes all providers and their events and fields (this may take a few minutes...).
 
 ### **consume_provider**
 

@@ -289,7 +289,6 @@ def tdh_get_provider_events(provider_guid: str) -> list[EventMetadata]:
                         f"Provider {provider_guid} - {event_name} count field index too high")
                 count_field = fields[count_index].name
             # TODO: check other (currently unsupported) flags?
-            assert count_field is None or length_field is None  # They can't be both used at the same time...
             # Field type ("intype") - if unknown, keep the integer value
             intype_value = event_property_info.Union.InType
             if intype_value <= EVENT_FIELD_INTYPE_MAX_VALUE:

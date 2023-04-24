@@ -79,7 +79,7 @@ class EztwProvider:
         """
         res = [f"Provider GUID={self.guid} ({self.name})", "*" * 40]
         for event in self.events:
-            res.append(event.string_details())
+            res.append(event.string_details(indent=1))
         return '\n'.join(res)
 
     def print(self):

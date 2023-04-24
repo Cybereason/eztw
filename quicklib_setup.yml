@@ -22,6 +22,7 @@ setup:
       - "eztw_demo_files = eztw.scripts.demo_files:main"
       - "eztw_consume_provider = eztw.scripts.consume_provider:main"
       - "eztw_tap_session = eztw.scripts.tap_session:main"
+      - "eztw_dump_providers = eztw.scripts.dump_providers:main"
   classifiers:
     - "Development Status :: 4 - Beta"
     - "Intended Audience :: Developers"

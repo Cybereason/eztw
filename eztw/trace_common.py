@@ -4,7 +4,7 @@ Various trace-specific common stuff.
 import ctypes
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional
+from typing import Union
 
 from .guid import canonize_GUID
 
@@ -80,7 +80,7 @@ class EVENT_FIELD_INTYPE(Enum):
     INTYPE_HEXDUMP = 35
     INTYPE_WBEMSID = 36
 
-# For those sneaky undocumented ones
+# For those sneaky undocumented ones, keep the max known value
 EVENT_FIELD_INTYPE_MAX_VALUE = max([x.value for x in EVENT_FIELD_INTYPE.__members__.values()])
 
 
@@ -101,8 +101,10 @@ class EventFieldMetadata:
     """
     name: str
     type: EVENT_FIELD_INTYPE
-    length: Optional[str] = None  # Either the name of the field that holds the byte size of this field, or None
-    count: Optional[str] = None   # Either the name of the field that holds the count of this fild, or None
+    # Either the name of the field that holds the byte size of this field, or None
+    length: Union[str, int, None] = None
+    # Either the name of the field that holds the count of this fild, or None
+    count: Union[str, int, None] = None
 
 
 @dataclass
