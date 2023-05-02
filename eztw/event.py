@@ -228,12 +228,20 @@ class EztwEvent:
         res = [f"{indent_str}Event ID={self.id} ({self.name})"]
         for version, (fields, _template) in sorted(self.versions.items()):
             res.append(f"{indent_str}\tVersion {version}:")
+            if not fields:
+                res.append(f"{indent_str}\t\t(empty event)")
             for field in fields:
                 if isinstance(field.type, EVENT_FIELD_INTYPE):
                     type_name = field.type.name
                 else:
                     type_name = f"Unknown type {field.type}"
-                res.append(f"{indent_str}\t\t{field.name}: {type_name}")
+                length_str = ""
+                if field.length is not None:
+                    length_str = f" (length: {field.length})"
+                count_str = ""
+                if field.count is not None:
+                    count_str = f" (count: {field.count})"
+                res.append(f"{indent_str}\t\t{field.name}: {type_name}{length_str}{count_str}")
         return '\n'.join(res)
 
     def print(self):
