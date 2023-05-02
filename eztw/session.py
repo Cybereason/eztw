@@ -16,7 +16,7 @@ from .controller import EztwController
 from .provider import eztwm, get_provider_config
 from .consumer import EztwConsumer
 from .event import EztwEvent, EztwFilter
-from .trace_common import LOST_EVENTS_GUID
+from .trace_common import LOST_EVENTS_GUID, ad_hoc_session_name
 
 
 class EztwSessionIterator:
@@ -134,7 +134,7 @@ def consume_events(events: EztwEvent | list[EztwEvent], session_name: str | None
     @param session_name: either a session name to use or None (default, in which case a temporary name is used)
     """
     if not session_name:
-        session_name = f"EZTW_TRACE_SESSION_{int(time.time())}"
+        session_name = ad_hoc_session_name()
     # Start consuming
     with EztwController(session_name, get_provider_config(events)):
         yield from EztwSessionIterator(session_name, events)

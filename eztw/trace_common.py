@@ -2,6 +2,7 @@
 Various trace-specific common stuff.
 """
 import ctypes
+import time
 from enum import Enum
 from dataclasses import dataclass
 
@@ -117,3 +118,6 @@ class EventMetadata:
     name: str
     keyword: int
     fields: list[EventFieldMetadata]
+
+def ad_hoc_session_name():
+    return f"EZTW_TRACE_SESSION_{int(time.time())}"

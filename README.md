@@ -542,6 +542,14 @@ This script dumps all registered providers to the output file.
 Without the 'events' qualifier, only the GUIDs and names are written.
 With the 'events' qualifiers, a huge monolithic file is created which includes all providers and their events and fields (this may take a few minutes...).
 
+### **consume_raw_provider**
+
+*python -m eztw.scripts.consume_raw_provider [provider GUID] <optional hex keywords, defaults to 0xFFFFFFFFFFFFFFFF>*
+
+This useful script consumes the given provider by GUID and optional keywords, and prints its raw event records to screen.
+The event records' data is printed in hex format, either using the **hexdump** package (if it's installed) or using binascii.hexlify.
+It is very useful for quickly exploring new and unknown trace providers.
+
 ### **consume_provider**
 
 *python -m eztw.scripts.consume_provider [provider name or GUID] <optional event IDs, comma separated>*

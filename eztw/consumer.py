@@ -204,9 +204,9 @@ class EventRecord:
         header = event_record.contents.EventHeader
         descriptor = header.EventDescriptor
         self.provider_guid = str(header.ProviderId)
-        self.id = descriptor.Id
+        # Old-style events have their actual ID in the 'opcode' field for some reason
+        self.id = descriptor.Id if descriptor.Id > 0 else descriptor.Opcode
         self.version = descriptor.Version
-        self.opcode = descriptor.Opcode
         self.keywords = descriptor.Keyword
         self.process_id = header.ProcessId
         self.thread_id = header.ThreadId
