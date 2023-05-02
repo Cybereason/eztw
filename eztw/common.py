@@ -2,6 +2,7 @@
 Various definitions and functions used throughout eztw.
 """
 import re
+import datetime
 import ctypes.wintypes
 
 # Simplify windows types and add some missing ones
@@ -25,6 +26,21 @@ FILETIME_TO_SECONDS_MULTIPLIER = 1.0/10000000.0
 
 def FILETIME_to_time(ft):
     return (ft * FILETIME_TO_SECONDS_MULTIPLIER) - FILETIME_EPOCH_DELTA_S
+
+class SYSTEMTIME(ctypes.Structure):
+    _fields_ = [('wYear', USHORT),
+                ('wMonth', USHORT),
+                ('wDayOfWeek', USHORT),
+                ('wDay', USHORT),
+                ('wHour', USHORT),
+                ('wMinute', USHORT),
+                ('wSecond', USHORT),
+                ('wMilliseconds', USHORT)]
+
+def SYSTEMTIME_to_time(st):
+    # datetime accepts microseconds - multiply milliseconds by 1000
+    dt = datetime.datetime(st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds * 1000)
+    return dt.timestamp()
 
 def as_list(x):
     """

@@ -3,10 +3,11 @@ import pytest
 import subprocess
 import ctypes
 import struct
+import time
 
 from .. import EztwController, EztwConsumer, get_provider, get_provider_config, parse_event, add_manual_provider
 from ..guid import GUID, canonize_GUID
-from ..common import FILETIME_EPOCH_DELTA_S, FILETIME_TO_SECONDS_MULTIPLIER
+from ..common import FILETIME_EPOCH_DELTA_S, FILETIME_TO_SECONDS_MULTIPLIER, SYSTEMTIME
 from ..trace_common import EVENT_FIELD_INTYPE, EventMetadata, EventFieldMetadata
 from ..log import disable_logging
 
@@ -56,6 +57,7 @@ class TestEztw:
             ("field_guid", EVENT_FIELD_INTYPE.INTYPE_GUID, provider_guid),
             ("field_pointer", EVENT_FIELD_INTYPE.INTYPE_POINTER, 123456789),
             ("field_filetime", EVENT_FIELD_INTYPE.INTYPE_FILETIME, 1234567890),
+            ("field_systemtime", EVENT_FIELD_INTYPE.INTYPE_SYSTEMTIME, 1234567890.0),
         ]
         event_fields = [EventFieldMetadata(fname, ftype) for fname, ftype, _ in field_names_types_and_values]
 
@@ -75,7 +77,11 @@ class TestEztw:
         multi_data3 = [b"qwer", b"asdf", b"zxcv"]
         event_fields.append(EventFieldMetadata("field_multi3_count", EVENT_FIELD_INTYPE.INTYPE_UINT16))
         event_fields.append(
-            EventFieldMetadata("field_multi3", EVENT_FIELD_INTYPE.INTYPE_UNICODESTRING, 4, "field_multi3_count"))
+            EventFieldMetadata("field_multi3", EVENT_FIELD_INTYPE.INTYPE_BINARY, 4, "field_multi3_count"))
+        multi_data4 = ["qwer", "asdf", "zxcv"]
+        event_fields.append(EventFieldMetadata("field_multi4_count", EVENT_FIELD_INTYPE.INTYPE_UINT16))
+        event_fields.append(
+            EventFieldMetadata("field_multi4", EVENT_FIELD_INTYPE.INTYPE_UNICODESTRING, 4, "field_multi4_count"))
 
         # Define a new event template
         event_id = 1234
@@ -127,6 +133,18 @@ class TestEztw:
                 if fvalue > 0:
                     fvalue = int((fvalue + FILETIME_EPOCH_DELTA_S) / FILETIME_TO_SECONDS_MULTIPLIER)
                 dummy_data_parts.append(struct.pack("<Q", fvalue))
+            elif ftype is EVENT_FIELD_INTYPE.INTYPE_SYSTEMTIME:
+                ts = time.localtime(fvalue)
+                st = SYSTEMTIME()
+                st.wYear = ts.tm_year
+                st.wMonth = ts.tm_mon
+                st.wDayOfWeek = ts.tm_wday
+                st.wDay = ts.tm_mday
+                st.wHour = ts.tm_hour
+                st.wMinute = ts.tm_min
+                st.wSecond = ts.tm_sec
+                st.wMilliseconds = 0
+                dummy_data_parts.append(bytes(st))
 
         # Special cases
         dummy_data_parts.append(binary_data1)
@@ -141,6 +159,9 @@ class TestEztw:
         dummy_data_parts.append(struct.pack("<H", len(multi_data3)))
         for x in multi_data3:
             dummy_data_parts.append(x)
+        dummy_data_parts.append(struct.pack("<H", len(multi_data4)))
+        for x in multi_data4:
+            dummy_data_parts.append(bytes(ctypes.create_unicode_buffer(x))[:-2])
 
         class DummyEventRecord:
             pass
@@ -169,3 +190,4 @@ class TestEztw:
         assert parsed_event.field_multi1 == multi_data1
         assert parsed_event.field_multi2 == multi_data2
         assert parsed_event.field_multi3 == multi_data3
+        assert parsed_event.field_multi4 == multi_data4

@@ -12,7 +12,6 @@ In addition, multiple API functions are exposed:
 """
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Union
 
 from .common import sanitize_name, EztwException, as_list
 from .trace_common import TRACE_LEVEL_VERBOSE, MSNT_SystemTrace_GUID
@@ -57,7 +56,7 @@ class EztwProvider:
     def events(self) -> list[EztwEvent]:
         return [event for _id, event in sorted(self.events_by_id.items())]
 
-    def get_events_by_ids(self, event_ids: Union[int, list[int]]) -> list[EztwEvent]:
+    def get_events_by_ids(self, event_ids: int | list[int]) -> list[EztwEvent]:
         return [self.events_by_id[event_id] for event_id in as_list(event_ids) if event_id in self.events_by_id]
 
     def parse(self, event_record: EventRecord):
@@ -199,8 +198,8 @@ def get_providers() -> list[(str, str)]:
     """
     return list(eztwm.provider_name_by_guid.items())
 
-def get_provider_config(events: Union[EztwEvent, list[EztwEvent]],
-                        level: int = TRACE_LEVEL_VERBOSE) -> list[EztwProviderConfig]:
+def get_provider_config(events: EztwEvent | list[EztwEvent], level: int = TRACE_LEVEL_VERBOSE) -> \
+        list[EztwProviderConfig]:
     """
     @param events: either a single EztwEvent or a list of them (not necessarily from the same provider!)
     @param level: verbosity level (0-5, default: TRACE_LEVEL_VERBOSE)

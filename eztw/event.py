@@ -8,13 +8,13 @@ import ctypes
 import functools
 from collections import OrderedDict
 from dataclasses import make_dataclass
-from typing import Union, Callable
+from typing import Callable
 import keyword as python_keywords
 
-from .common import FILETIME_to_time, EztwException, as_list, sanitize_name
+from .common import FILETIME_to_time, EztwException, as_list, sanitize_name, SYSTEMTIME, SYSTEMTIME_to_time
 from .guid import GUID
-from .tdh import EVENT_FIELD_INTYPE, EventMetadata
 from .consumer import EventRecord
+from .trace_common import EVENT_FIELD_INTYPE, EventMetadata, EventFieldMetadata
 
 
 class EztwEventParseException(EztwException):
@@ -75,19 +75,28 @@ class FieldsReader:
         return FILETIME_to_time(self.consume_UINT64())
 
     def consume_SYSTEMTIME(self):
-        # TODO: parse as SYSTEMTIME
-        return self.consume(16)
+        return SYSTEMTIME_to_time(SYSTEMTIME.from_buffer_copy(self.consume(16)))
 
-    def consume_STRING(self):
+    def consume_STRING(self, size=None):
+        if size is None:
+            str_value = ctypes.string_at(self.data[self.cur_offset:])
+            # Advance internal offset by string size plus null termination byte
+            self.cur_offset += len(str_value) + 1
+        else:
+            # Manually append null termination
+            str_value = ctypes.string_at(self.consume(size) + b'\x00')
         # ctypes.string_at (unlike wstring_at) returns bytes, need to decode
-        res = ctypes.string_at(self.data[self.cur_offset:]).decode(errors='replace')
-        self.cur_offset += len(res) + 1
-        return res
+        return str_value.decode(errors='replace')
 
-    def consume_WSTRING(self):
-        res = ctypes.wstring_at(self.data[self.cur_offset:])
-        self.cur_offset += (len(res) + 1) * 2
-        return res
+    def consume_WSTRING(self, size=None):
+        if size is None:
+            str_value = ctypes.wstring_at(self.data[self.cur_offset:])
+            # Advance internal offset by string size plus null termination byte, multiplied by wchar_t size
+            self.cur_offset += (len(str_value) + 1) * 2
+        else:
+            # Manually append null termination
+            str_value = ctypes.wstring_at(self.consume(size * 2) + b'\x00\x00')
+        return str_value
 
     def consume_BOOLEAN(self):
         return bool(self.consume_UINT32())
@@ -108,34 +117,68 @@ class FieldsReader:
     def consume_GUID(self):
         return str(GUID.from_buffer_copy(self.consume(16)))
 
-    INTYPE_TO_CONSUMER = {
-        EVENT_FIELD_INTYPE.INTYPE_INT8: consume_INT8,
-        EVENT_FIELD_INTYPE.INTYPE_UINT8: consume_UINT8,
-        EVENT_FIELD_INTYPE.INTYPE_INT16: consume_INT16,
-        EVENT_FIELD_INTYPE.INTYPE_UINT16: consume_UINT16,
-        EVENT_FIELD_INTYPE.INTYPE_INT32: consume_INT32,
-        EVENT_FIELD_INTYPE.INTYPE_UINT32: consume_UINT32,
-        EVENT_FIELD_INTYPE.INTYPE_HEXINT32: consume_UINT32,
-        EVENT_FIELD_INTYPE.INTYPE_INT64: consume_INT64,
-        EVENT_FIELD_INTYPE.INTYPE_UINT64: consume_UINT64,
-        EVENT_FIELD_INTYPE.INTYPE_HEXINT64: consume_UINT64,
-        EVENT_FIELD_INTYPE.INTYPE_POINTER: consume_POINTER,
-        EVENT_FIELD_INTYPE.INTYPE_BOOLEAN: consume_BOOLEAN,
-        EVENT_FIELD_INTYPE.INTYPE_FILETIME: consume_FILETIME,
-        EVENT_FIELD_INTYPE.INTYPE_SYSTEMTIME: consume_SYSTEMTIME,
-        EVENT_FIELD_INTYPE.INTYPE_UNICODESTRING: consume_WSTRING,
-        EVENT_FIELD_INTYPE.INTYPE_ANSISTRING: consume_STRING,
-        EVENT_FIELD_INTYPE.INTYPE_FLOAT: consume_FLOAT,
-        EVENT_FIELD_INTYPE.INTYPE_DOUBLE: consume_DOUBLE,
-        EVENT_FIELD_INTYPE.INTYPE_SID: consume_SID,
-        EVENT_FIELD_INTYPE.INTYPE_GUID: consume_GUID,
-    }
+    def consume_BiNARY(self, size=None):
+        if size is not None:
+            return self.consume(size)
+        else:
+            # For some old IPv6 representations
+            return self.consume(16)
 
-    def consumer_by_type(self, in_type: EVENT_FIELD_INTYPE):
-        consumer = self.INTYPE_TO_CONSUMER.get(in_type)
-        if consumer is None:
-            raise EztwEventParseException(f"Unknown IN_TYPE {in_type!r}")
-        return functools.partial(consumer, self)
+    def read(self, field: EventFieldMetadata, previous_fields: OrderedDict):
+        match field.type:
+            case EVENT_FIELD_INTYPE.INTYPE_INT8:
+                consume_func = self.consume_INT8
+            case EVENT_FIELD_INTYPE.INTYPE_UINT8:
+                consume_func = self.consume_UINT8
+            case EVENT_FIELD_INTYPE.INTYPE_INT16:
+                consume_func = self.consume_INT16
+            case EVENT_FIELD_INTYPE.INTYPE_UINT16:
+                consume_func = self.consume_UINT16
+            case EVENT_FIELD_INTYPE.INTYPE_INT32:
+                consume_func = self.consume_INT32
+            case EVENT_FIELD_INTYPE.INTYPE_UINT32 | EVENT_FIELD_INTYPE.INTYPE_HEXINT32:
+                consume_func = self.consume_UINT32
+            case EVENT_FIELD_INTYPE.INTYPE_INT64:
+                consume_func = self.consume_INT64
+            case EVENT_FIELD_INTYPE.INTYPE_UINT64 | EVENT_FIELD_INTYPE.INTYPE_HEXINT64:
+                consume_func = self.consume_UINT64
+            case EVENT_FIELD_INTYPE.INTYPE_POINTER:
+                consume_func = self.consume_POINTER
+            case EVENT_FIELD_INTYPE.INTYPE_BOOLEAN:
+                consume_func = self.consume_BOOLEAN
+            case EVENT_FIELD_INTYPE.INTYPE_FILETIME:
+                consume_func = self.consume_FILETIME
+            case EVENT_FIELD_INTYPE.INTYPE_SYSTEMTIME:
+                consume_func = self.consume_SYSTEMTIME
+            case EVENT_FIELD_INTYPE.INTYPE_UNICODESTRING:
+                consume_func = self.consume_WSTRING
+            case EVENT_FIELD_INTYPE.INTYPE_ANSISTRING:
+                consume_func = self.consume_STRING
+            case EVENT_FIELD_INTYPE.INTYPE_FLOAT:
+                consume_func = self.consume_FLOAT
+            case EVENT_FIELD_INTYPE.INTYPE_DOUBLE:
+                consume_func = self.consume_DOUBLE
+            case EVENT_FIELD_INTYPE.INTYPE_SID:
+                consume_func = self.consume_SID
+            case EVENT_FIELD_INTYPE.INTYPE_GUID:
+                consume_func = self.consume_GUID
+            case EVENT_FIELD_INTYPE.INTYPE_BINARY:
+                consume_func = self.consume_BiNARY
+            case _:
+                raise EztwEventParseException(f"Unknown or unsupported IN_TYPE {field.type!r}")
+
+        # https://docs.microsoft.com/en-us/windows/win32/wes/eventmanifestschema-inputtype-complextype
+        # If there's a 'length' field, either read this amount of bytes (if length is int) or the variable
+        # length is stored in a previous field (if length is str)
+        if field.length is not None:
+            length_value = previous_fields.get(field.length) if not isinstance(field.length, int) else field.length
+            consume_func = functools.partial(consume_func, length_value)
+        # If the 'count' field is not None, read the same type multiple times
+        if field.count is not None:
+            count_value = previous_fields.get(field.count) if not isinstance(field.count, int) else field.count
+            return [consume_func() for _ in range(count_value)]
+        else:
+            return consume_func()
 
 
 class EztwEvent:
@@ -216,31 +259,10 @@ class EztwEvent:
         # Maintain the order of the parsed fields
         field_values = OrderedDict()
         # Initialize a new data consumer
-        data_consumer = FieldsReader(event_record.data, event_record.is_64bit)
+        fields_reader = FieldsReader(event_record.data, event_record.is_64bit)
         for field in event_fields:
-            # https://docs.microsoft.com/en-us/windows/win32/wes/eventmanifestschema-inputtype-complextype
-            # If there's a 'length' field, either read this amount of bytes (if length is int) or the variable
-            # length is stored in a previous field (if length is str)
-            if field.length is not None:
-                length_value = field_values.get(field.length) if not isinstance(field.length, int) else field.length
-                # If the 'count' field is also not None, read the same length multiple times
-                if field.count is not None:
-                    count_value = field_values.get(field.count) if not isinstance(field.count, int) else field.count
-                    field_values[field.name] = [data_consumer.consume(length_value) for _ in range(count_value)]
-                # Otherwise - simpy read length_value raw bytes
-                else:
-                    field_values[field.name] = data_consumer.consume(length_value)
-                continue
-            consumer_function = data_consumer.consumer_by_type(field.type)
-            # If there's a 'count' field, it means there's an array of values. The count may either be fixed (int)
-            # or a name of a previous field that holds the count
-            if field.count is not None:
-                count_value = field_values.get(field.count) if not isinstance(field.count, int) else field.count
-                # Read this many times the field's type
-                field_values[field.name] = [consumer_function() for _ in range(count_value)]
-            else:
-                # Simply read the field
-                field_values[field.name] = consumer_function()
+            # Parse the next field
+            field_values[field.name] = fields_reader.read(field, field_values)
         # Cast the parsed fields, by order, into the immutable event template
         return event_template(*field_values.values())
 
@@ -268,7 +290,7 @@ class EztwFilter:
     >>> if event_record in ezf:
     >>>     # Do something
     """
-    def __init__(self, events: Union[EztwEvent, list[EztwEvent]]):
+    def __init__(self, events: EztwEvent | list[EztwEvent]):
         self.event_hashes = {hash(event) for event in as_list(events)}
 
     def __contains__(self, event_record: EventRecord):

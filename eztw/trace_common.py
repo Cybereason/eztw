@@ -4,7 +4,6 @@ Various trace-specific common stuff.
 import ctypes
 from enum import Enum
 from dataclasses import dataclass
-from typing import Union
 
 from .guid import canonize_GUID
 
@@ -102,9 +101,9 @@ class EventFieldMetadata:
     name: str
     type: EVENT_FIELD_INTYPE
     # Either the name of the field that holds the byte size of this field, or None
-    length: Union[str, int, None] = None
+    length: str | int | None = None
     # Either the name of the field that holds the count of this fild, or None
-    count: Union[str, int, None] = None
+    count: str | int | None = None
 
 
 @dataclass

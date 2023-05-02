@@ -8,7 +8,6 @@ These are not yet supported.
 import ctypes
 import winerror
 import win32event
-from typing import Union
 
 from .guid import GUID
 from .log import LOGGER
@@ -157,7 +156,7 @@ class EztwController:
     """
     Create and manage a real-time trace session, as well as enable providers by config.
     """
-    def __init__(self, session_name: str, providers_config: Union[EztwProviderConfig, list[EztwProviderConfig]]):
+    def __init__(self, session_name: str, providers_config: EztwProviderConfig | list[EztwProviderConfig]):
         """
         @param session_name: the name of the new trace
         @param providers_config: a list of EztwProviderConfig or a single EztwProviderConfig

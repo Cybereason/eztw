@@ -8,12 +8,11 @@ import time
 import threading
 import win32api
 import winerror
-from typing import Optional
 
 from .log import LOGGER
 from .guid import GUID
-from .common import UCHAR, USHORT, ULONG, LPWSTR, LARGE_INTEGER, ULARGE_INTEGER, LPVOID, LONG, WCHAR, FILETIME,\
-    FILETIME_to_time, EztwException
+from .common import UCHAR, USHORT, ULONG, LPWSTR, LARGE_INTEGER, ULARGE_INTEGER, LPVOID, LONG, WCHAR, FILETIME, \
+    FILETIME_to_time, EztwException, SYSTEMTIME
 from .trace_common import ADVAPI32_DLL, TRACEHANDLE, INVALID_TRACE_HANDLE
 
 
@@ -105,16 +104,6 @@ class EVENT_RECORD(ctypes.Structure):
                 ('ExtendedData', ctypes.POINTER(EVENT_HEADER_EXTENDED_DATA_ITEM)),
                 ('UserData', LPVOID),
                 ('UserContext', LPVOID)]
-
-class SYSTEMTIME(ctypes.Structure):
-    _fields_ = [('wYear', USHORT),
-                ('wMonth', USHORT),
-                ('wDayOfWeek', USHORT),
-                ('wDay', USHORT),
-                ('wHour', USHORT),
-                ('wMinute', USHORT),
-                ('wSecond', USHORT),
-                ('wMilliseconds', USHORT)]
 
 class TIME_ZONE_INFORMATION(ctypes.Structure):
     _fields_ = [('Bias', LONG),
@@ -347,7 +336,7 @@ class EztwConsumer:
         """
         return self.events_queue.qsize()
 
-    def get_event(self, timeout: float = 0.1) -> Optional[EventRecord]:
+    def get_event(self, timeout: float = 0.1) -> EventRecord | None:
         """
         Wait for the next event record up to timeout
 

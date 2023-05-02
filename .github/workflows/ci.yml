@@ -17,16 +17,13 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest]
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.10', '3.11']
         include:
           - architecture: 'x64'
             flag-ignore-failure: false
           - os: windows-latest
             python-version: '3.10'
             architecture: 'x86'
-          - os: windows-latest
-            python-version: '3.9'
-            archive-artifacts: true
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

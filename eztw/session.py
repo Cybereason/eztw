@@ -10,7 +10,6 @@ import threading
 import queue
 import time
 from collections import defaultdict, Counter
-from typing import Optional, Union
 
 from .common import as_list, EztwException
 from .controller import EztwController
@@ -39,8 +38,7 @@ class EztwSessionIterator:
     >>>     for event_record, parsed_event in si:
     >>>         # do something
     """
-    def __init__(self, session_names: Union[str, list[str]],
-                 filtered_events: Optional[Union[EztwEvent, list[EztwEvent]]] = None):
+    def __init__(self, session_names: str | list[str], filtered_events: EztwEvent | list[EztwEvent] | None = None):
         self.session_names = as_list(session_names)
         assert len(self.session_names) >= 1
         self.event_filter = EztwFilter(filtered_events) if filtered_events else None
@@ -86,7 +84,7 @@ class EztwSessionIterator:
 
     def __iter__(self):
         event_counter = defaultdict(Counter)
-        unknown_providers = set()
+        unknown_events = set()
         start_time = time.time()
         try:
             # Main iteration loop
@@ -98,10 +96,10 @@ class EztwSessionIterator:
                         # Parse and yield
                         yield event_record, eztwm.parse(event_record)
                     except EztwException as e:
-                        # Only print once per provider
-                        if event_record.provider_guid not in unknown_providers:
+                        # Only print once per event
+                        if hash(event_record.provider_guid) not in unknown_events:
                             print(f"Failed to parse event {event_record} - {e}")
-                            unknown_providers.add(event_record.provider_guid)
+                            unknown_events.add(hash(event_record.provider_guid))
         except KeyboardInterrupt:
             print("\nCaught KeyboardInterrupt")
         except Exception as e:
@@ -124,7 +122,7 @@ class EztwSessionIterator:
             print()
 
 
-def consume_events(events: Union[EztwEvent, list[EztwEvent]], session_name: Optional[str] = None):
+def consume_events(events: EztwEvent | list[EztwEvent], session_name: str | None = None):
     """
     Convenience function that automatically deducts the needed providers and keywords from the given list of
     event classes, and only yields the parsed events if they're on the list (provider GUID + event ID).

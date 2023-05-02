@@ -38,7 +38,7 @@ In its core, **eztw** does four things:
 
 ### Known limitations
 + Windows 10 and above.
-+ Python 3.9 and above.
++ Python 3.10 and above.
 + Only real-time trace sessions supported.
 + Not all trace providers supported automatically (many undocumented providers exist, which can be added [manually](#manually-adding-new-providers)).
 + No old-style (MOF) providers supported for now, only new-style (i.e: XML manifest obtained via the TDH API).
