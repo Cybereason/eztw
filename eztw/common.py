@@ -55,9 +55,9 @@ def as_list(x):
     # Wrap x as a list and return
     return [x]
 
-def sanitize_name(name: str) -> str:
+def sanitize_name(name: str, replacement="_") -> str:
     """Replace invalid characters with underscores"""
-    return re.sub(r"\W", "_", name)
+    return re.sub(r"\W+", replacement, name)
 
 
 class EztwException(Exception):

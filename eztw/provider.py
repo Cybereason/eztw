@@ -14,10 +14,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from .common import sanitize_name, EztwException, as_list
-from .trace_common import TRACE_LEVEL_VERBOSE, MSNT_SystemTrace_GUID
+from .trace_common import TRACE_LEVEL_VERBOSE, MSNT_SystemTrace_GUID, MAX_KEYWORDS
 from .guid import GUID, canonize_GUID
-from .tdh import tdh_enumerate_providers, tdh_get_provider_events, EventMetadata, EztwTdhException
 from .event import EztwEvent, EventRecord
+from .tdh import tdh_enumerate_providers, tdh_get_provider_events, EventMetadata, EztwTdhException
+#from .mof import mof_get_provider_events
 
 
 class EztwProviderException(EztwException):
@@ -94,7 +95,7 @@ class EztwProviderConfig:
     Used to enable providers in new sessions using provider GUID, keywords and verbosity level
     """
     guid: str
-    keywords: int = 0xFFFFFFFFFFFFFFFF
+    keywords: int = MAX_KEYWORDS
     level: int = TRACE_LEVEL_VERBOSE
 
 
@@ -153,10 +154,16 @@ class EztwManager:
         provider_name = self.get_provider_name_from_guid(provider_guid)
         try:
             provider_events = tdh_get_provider_events(provider_guid)
+            # try:
+            #     provider_events = tdh_get_provider_events(provider_guid)
+            # except EztwTdhException:
+            #     provider_events = mof_get_provider_events(provider_guid)
             new_provider = EztwProvider(provider_guid, provider_name, provider_events)
+            # for actual_provider_guid in set(x.provider_guid for x in provider_events):
+            #     self.providers[actual_provider_guid] = new_provider
             self.providers[provider_guid] = new_provider
             return new_provider
-        except EztwTdhException:
+        except EztwException:
             # Set a tombstone for this provider GUID, so we won't try again for the next event
             self.providers[provider_guid] = self._unknown_provider_tombstone
             raise EztwProviderException(f"Could not find events for provider {provider_guid}")
@@ -164,7 +171,7 @@ class EztwManager:
     def get_provider_by_name(self, provider_name: str) -> EztwProvider:
         provider_guid = self.provider_guid_by_name.get(canonize_provider_name(provider_name))
         if not provider_guid:
-            raise EztwProviderException(f"Could not find locally registered provider named {provider_name}")
+            raise EztwProviderException(f"Could not find locally registered provider named {provider_name!r}")
         return self.get_provider_by_guid(provider_guid)
 
     def get_provider(self, guid_or_name: str) -> EztwProvider:
@@ -210,10 +217,10 @@ def get_provider_config(events: EztwEvent | list[EztwEvent], level: int = TRACE_
     for event in as_list(events):
         by_provider_guid[event.provider_guid] |= event.keyword
     # In the special case where ALL events are required (i.e: aggregated keywords equal "all_keywords"),
-    # instead set the keywords to max (0xffffffffffffffff)
+    # instead set the keywords to max
     for provider_guid, keywords in list(by_provider_guid.items()):
         if keywords == eztwm.get_provider_by_guid(provider_guid).all_keywords:
-            by_provider_guid[provider_guid] = 0xffffffffffffffff
+            by_provider_guid[provider_guid] = MAX_KEYWORDS
     return [EztwProviderConfig(guid, keywords, level) for guid, keywords in by_provider_guid.items()]
 
 def add_manual_provider(provider_guid: str, provider_name: str, provider_events: list[EventMetadata]):

@@ -124,6 +124,14 @@ class FieldsReader:
             # For some old IPv6 representations
             return self.consume(16)
 
+    def consume_SIZED_WSTRING(self):
+        size = self.consume_UINT16()
+        return ctypes.wstring_at(self.consume(size) + b'\x00\x00')
+
+    def consume_SIZED_STRING(self):
+        size = self.consume_UINT16()
+        return ctypes.string_at(self.consume(size) + b'\x00').decode(errors='replace')
+
     def read(self, field: EventFieldMetadata, previous_fields: OrderedDict):
         match field.type:
             case EVENT_FIELD_INTYPE.INTYPE_INT8:
@@ -164,6 +172,10 @@ class FieldsReader:
                 consume_func = self.consume_GUID
             case EVENT_FIELD_INTYPE.INTYPE_BINARY:
                 consume_func = self.consume_BiNARY
+            case EVENT_FIELD_INTYPE.INTYPE_COUNTEDSTRING:
+                consume_func = self.consume_SIZED_WSTRING
+            case EVENT_FIELD_INTYPE.INTYPE_COUNTEDANSISTRING:
+                consume_func = self.consume_SIZED_STRING
             case _:
                 raise EztwEventParseException(f"Unknown or unsupported IN_TYPE {field.type!r}")
 

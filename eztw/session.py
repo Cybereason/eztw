@@ -16,7 +16,7 @@ from .controller import EztwController
 from .provider import eztwm, get_provider_config
 from .consumer import EztwConsumer
 from .event import EztwEvent, EztwFilter
-from .trace_common import LOST_EVENTS_GUID, ad_hoc_session_name
+from .trace_common import LOST_EVENTS_GUID, ad_hoc_session_name, MSNT_SystemTrace_GUID
 
 
 class EztwSessionIterator:
@@ -92,14 +92,17 @@ class EztwSessionIterator:
                 # Count this event
                 event_counter[event_record.provider_guid][event_record.id] += 1
                 if self.event_filter is None or event_record in self.event_filter:
+                    # Ignore legacy kernel events (for now...)
+                    if event_record.provider_guid == MSNT_SystemTrace_GUID:
+                        continue
                     try:
                         # Parse and yield
                         yield event_record, eztwm.parse(event_record)
                     except EztwException as e:
                         # Only print once per event
-                        if hash(event_record.provider_guid) not in unknown_events:
+                        if hash(event_record) not in unknown_events:
                             print(f"Failed to parse event {event_record} - {e}")
-                            unknown_events.add(hash(event_record.provider_guid))
+                            unknown_events.add(hash(event_record))
         except KeyboardInterrupt:
             print("\nCaught KeyboardInterrupt")
         except Exception as e:

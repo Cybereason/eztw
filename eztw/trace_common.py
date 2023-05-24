@@ -30,6 +30,8 @@ MSNT_SystemTrace_GUID = canonize_GUID("{68fdd900-4a3e-11d1-84f4-0000f80464e3}")
 # https://learn.microsoft.com/en-us/windows/win32/etw/lost-event
 LOST_EVENTS_GUID = canonize_GUID("{6a399ae0-4bc6-4de9-870b-3657f8947e7e}")
 
+MAX_KEYWORDS = 0xffffffffffffffff
+
 
 # https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-decoding_source
 class PROVIDER_DECODING_SOURCE(Enum):

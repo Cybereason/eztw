@@ -265,7 +265,7 @@ def tdh_get_provider_events(provider_guid: str) -> list[EventMetadata]:
                 event_info_buf, ctypes.sizeof(TRACE_EVENT_INFO),
                 EVENT_PROPERTY_INFO, trace_event_info.TopLevelPropertyCount):
             # Get the field name
-            field_name = sanitize_name(read_wstring_at(event_info_buf, event_property_info.NameOffset))
+            field_name = sanitize_name(read_wstring_at(event_info_buf, event_property_info.NameOffset), "")
             length_field = None
             # If this is a fixed-length field - keep the int value
             if event_property_info.Flags & TDH_PROPERTY_FLAGS.PropertyParamFixedLength:

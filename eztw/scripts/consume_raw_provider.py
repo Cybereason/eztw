@@ -1,6 +1,6 @@
 """
 This is a useful script that can consume any provider based on its GUID and optional keywords
-(defaults to 0xFFFFFFFFFFFFFFFF). Events are not parsed, but rather their event records are printed
+(defaults to MAX_KEYWORDS). Events are not parsed, but rather their event records are printed
 and also their hex data (using the hexdump module, if it's installed, or binascii.hexlify otherwise).
 """
 import sys
@@ -8,7 +8,7 @@ import time
 import contextlib
 
 from .. import EztwController, EztwConsumer
-from ..trace_common import ad_hoc_session_name
+from ..trace_common import ad_hoc_session_name, MAX_KEYWORDS
 from ..provider import EztwProviderConfig
 from ..guid import GUID
 from ..log import LOGGER
@@ -33,7 +33,7 @@ def main():
     if len(sys.argv) > 2:
         keywords = int(sys.argv[2], 16)
     else:
-        keywords = 0xFFFFFFFFFFFFFFFF
+        keywords = MAX_KEYWORDS
     config = EztwProviderConfig(provider_guid, keywords)
     session_name = ad_hoc_session_name()
     LOGGER.info(f"Consuming events from {provider_guid} with keywords {hex(keywords)} - press Ctrl+C to stop")

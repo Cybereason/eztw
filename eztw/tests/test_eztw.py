@@ -58,6 +58,8 @@ class TestEztw:
             ("field_pointer", EVENT_FIELD_INTYPE.INTYPE_POINTER, 123456789),
             ("field_filetime", EVENT_FIELD_INTYPE.INTYPE_FILETIME, 1234567890),
             ("field_systemtime", EVENT_FIELD_INTYPE.INTYPE_SYSTEMTIME, 1234567890.0),
+            ("field_countedstring", EVENT_FIELD_INTYPE.INTYPE_COUNTEDSTRING, "test 123"),
+            ("field_countedansistring", EVENT_FIELD_INTYPE.INTYPE_COUNTEDANSISTRING, b"test 123"),
         ]
         event_fields = [EventFieldMetadata(fname, ftype) for fname, ftype, _ in field_names_types_and_values]
 
@@ -145,6 +147,10 @@ class TestEztw:
                 st.wSecond = ts.tm_sec
                 st.wMilliseconds = 0
                 dummy_data_parts.append(bytes(st))
+            elif ftype is EVENT_FIELD_INTYPE.INTYPE_COUNTEDSTRING:
+                dummy_data_parts.append(struct.pack("<H", len(fvalue)*2) + bytes(ctypes.create_unicode_buffer(fvalue))[:-2])
+            elif ftype is EVENT_FIELD_INTYPE.INTYPE_COUNTEDANSISTRING:
+                dummy_data_parts.append(struct.pack("<H", len(fvalue)) + bytes(ctypes.create_string_buffer(fvalue))[:-1])
 
         # Special cases
         dummy_data_parts.append(binary_data1)
@@ -178,7 +184,7 @@ class TestEztw:
         for fname, ftype, fvalue in field_names_types_and_values:
             parsed_value = getattr(parsed_event, fname)
             # Annoying Python strings
-            if ftype is EVENT_FIELD_INTYPE.INTYPE_ANSISTRING:
+            if ftype in [EVENT_FIELD_INTYPE.INTYPE_ANSISTRING, EVENT_FIELD_INTYPE.INTYPE_COUNTEDANSISTRING]:
                 parsed_value = parsed_value.encode()
             elif ftype in [EVENT_FIELD_INTYPE.INTYPE_FLOAT, EVENT_FIELD_INTYPE.INTYPE_DOUBLE]:
                 parsed_value = round(parsed_value, 3)
