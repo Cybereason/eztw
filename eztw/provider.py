@@ -17,8 +17,7 @@ from .common import sanitize_name, EztwException, as_list
 from .trace_common import TRACE_LEVEL_VERBOSE, MSNT_SystemTrace_GUID, MAX_KEYWORDS
 from .guid import GUID, canonize_GUID
 from .event import EztwEvent, EventRecord
-from .tdh import tdh_enumerate_providers, tdh_get_provider_events, EventMetadata, EztwTdhException
-#from .mof import mof_get_provider_events
+from .tdh import tdh_enumerate_providers, tdh_get_provider_keywords, tdh_get_provider_events, EventMetadata
 
 
 class EztwProviderException(EztwException):
@@ -30,9 +29,14 @@ class EztwProvider:
     Represents a trace provider and its events.
     It is constructed from GUID, name and a list of TdhEvent objects (usually done automatically by EztwManager).
     """
-    def __init__(self, guid: str, name: str, event_descriptors: list[EventMetadata]):
+    def __init__(self, guid: str, name: str, keywords: dict[str, int], event_descriptors: list[EventMetadata]):
         self.guid = str(GUID(guid))
         self.name = name
+        self.keywords = {}
+        for keyword_name, keyword_value in keywords.items():
+            actual_keyword_name = f"Keyword_{keyword_name}"
+            self.keywords[actual_keyword_name] = keyword_value
+            setattr(self, actual_keyword_name, keyword_value)
         # Group the event descriptors by their id
         by_id = defaultdict(list)
         for event_descriptor in event_descriptors:
@@ -40,7 +44,6 @@ class EztwProvider:
         # Rearrange the events for ease of access
         self.events_by_id = {}
         self.events_by_name = {}
-        self.all_keywords = 0
         for event_id, event_descriptors in by_id.items():
             # Add a new EztwEvent instance, store it by id and by its sanitized name
             event = EztwEvent(event_descriptors)
@@ -51,7 +54,6 @@ class EztwProvider:
                 actual_event_name = f"Event_{event.id}"
             self.events_by_name[actual_event_name] = event
             setattr(self, actual_event_name, event)
-            self.all_keywords |= event.keyword
 
     @property
     def events(self) -> list[EztwEvent]:
@@ -78,6 +80,10 @@ class EztwProvider:
         @return: a nice representation of the provider, including all its events
         """
         res = [f"Provider GUID={self.guid} ({self.name})", "*" * 40]
+        res.append("Keywords:")
+        for keyword_name, keyword_value in sorted(self.keywords.items(), key=lambda x: x[1]):
+            res.append(f"\t{keyword_name} = {hex(keyword_value)}")
+        res.append("Events:")
         for event in self.events:
             res.append(event.string_details(indent=1))
         return '\n'.join(res)
@@ -154,13 +160,8 @@ class EztwManager:
         provider_name = self.get_provider_name_from_guid(provider_guid)
         try:
             provider_events = tdh_get_provider_events(provider_guid)
-            # try:
-            #     provider_events = tdh_get_provider_events(provider_guid)
-            # except EztwTdhException:
-            #     provider_events = mof_get_provider_events(provider_guid)
-            new_provider = EztwProvider(provider_guid, provider_name, provider_events)
-            # for actual_provider_guid in set(x.provider_guid for x in provider_events):
-            #     self.providers[actual_provider_guid] = new_provider
+            provider_keywords = tdh_get_provider_keywords(provider_guid)
+            new_provider = EztwProvider(provider_guid, provider_name, provider_keywords, provider_events)
             self.providers[provider_guid] = new_provider
             return new_provider
         except EztwException:
@@ -205,10 +206,12 @@ def get_providers() -> list[(str, str)]:
     """
     return list(eztwm.provider_name_by_guid.items())
 
-def get_provider_config(events: EztwEvent | list[EztwEvent], level: int = TRACE_LEVEL_VERBOSE) -> \
-        list[EztwProviderConfig]:
+def get_provider_config(events: EztwEvent | list[EztwEvent], keywords: None | dict[str, int] = None,
+                        level: int = TRACE_LEVEL_VERBOSE) -> list[EztwProviderConfig]:
     """
     @param events: either a single EztwEvent or a list of them (not necessarily from the same provider!)
+    @param keywords: either None (implicit keywords from events) or a dict from provider GUID to keyword value.
+        (only providers for which there are events given are used, others are ignored...)
     @param level: verbosity level (0-5, default: TRACE_LEVEL_VERBOSE)
     @return: list of EztwProviderConfig, one for each relevant provider
     """
@@ -216,11 +219,10 @@ def get_provider_config(events: EztwEvent | list[EztwEvent], level: int = TRACE_
     by_provider_guid = defaultdict(int)
     for event in as_list(events):
         by_provider_guid[event.provider_guid] |= event.keyword
-    # In the special case where ALL events are required (i.e: aggregated keywords equal "all_keywords"),
-    # instead set the keywords to max
-    for provider_guid, keywords in list(by_provider_guid.items()):
-        if keywords == eztwm.get_provider_by_guid(provider_guid).all_keywords:
-            by_provider_guid[provider_guid] = MAX_KEYWORDS
+    # Override implicit keywords as needed
+    for provider_guid, keywords in keywords.items():
+        if provider_guid in by_provider_guid:
+            by_provider_guid[provider_guid] = keywords
     return [EztwProviderConfig(guid, keywords, level) for guid, keywords in by_provider_guid.items()]
 
 def add_manual_provider(provider_guid: str, provider_name: str, provider_events: list[EventMetadata]):

@@ -163,6 +163,39 @@ TdhGetManifestEventInformation = ctypes.WINFUNCTYPE(
     ctypes.POINTER(ULONG),              # ULONG *BufferSize
 )(("TdhGetManifestEventInformation", TDH_DLL))
 
+# https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-event_field_type
+class EVENT_FIELD_TYPE:
+    EventKeywordInformation = 0
+    EventLevelInformation = 1
+    EventChannelInformation = 2
+    EventTaskInformation = 3
+    EventOpcodeInformation = 4
+    EventInformationMax = 5
+
+# https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-provider_field_info
+class PROVIDER_FIELD_INFO(ctypes.Structure):
+    _fields_ = [('NameOffset', ULONG),
+                ('DescriptionOffset', ULONG),
+                ('Value', ULONGLONG),
+                ]
+
+# https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-provider_field_infoarray
+class PROVIDER_FIELD_INFOARRAY(ctypes.Structure):
+    _fields_ = [('NumberOfElements', ULONG),
+                ('FieldType', ULONG),
+                #('FieldInfoArray', LPVOID), # Ignore array pointer
+                ]
+
+# https://learn.microsoft.com/en-us/windows/win32/api/tdh/nf-tdh-tdhqueryproviderfieldinformation
+TdhQueryProviderFieldInformation = ctypes.WINFUNCTYPE(
+    ULONG,                  # Return value
+    ctypes.POINTER(GUID),   # LPGUID pGuid
+    ULONGLONG,              # ULONGLONG EventFieldValue
+    ULONG,                  # EVENT_FIELD_TYPE EventFieldType
+    LPVOID,                 # PPROVIDER_FIELD_INFOARRAY pBuffer
+    ctypes.POINTER(ULONG),  # ULONG *pBufferSize
+)(("TdhQueryProviderFieldInformation", TDH_DLL))
+
 
 ########
 # Eztw
@@ -198,6 +231,38 @@ def tdh_enumerate_providers() -> list[ProviderMetadata]:
             read_wstring_at(buf, trace_provider_info.ProviderNameOffset),
             schema_source))
     return providers
+
+@cache
+def tdh_get_provider_keywords(provider_guid: str) -> dict[str, int]:
+    """
+    Given a provider's GUID attempts to return the known keywords of the provider.
+
+    @param provider_guid: a valid GUID string
+    @return: dictionary of keyword name to keyword value
+    """
+    provider_guid_struct = GUID(provider_guid)
+    size = ULONG(0)
+    # Call TdhQueryProviderFieldInformation with NULL to get the required size (Microsoft-style...)
+    rc = TdhQueryProviderFieldInformation(ctypes.byref(provider_guid_struct), 0xffffffffffffffff,
+                                          EVENT_FIELD_TYPE.EventKeywordInformation, 0, ctypes.byref(size))
+    if rc != winerror.ERROR_INSUFFICIENT_BUFFER:
+        raise EztwTdhException(
+            f"TdhQueryProviderFieldInformation failed for provider {provider_guid} with error {rc}")
+    # Call TdhQueryProviderFieldInformation again with allocated buffer
+    buf = ctypes.create_string_buffer(size.value)
+    rc = TdhQueryProviderFieldInformation(ctypes.byref(provider_guid_struct), 0xffffffffffffffff,
+                                          EVENT_FIELD_TYPE.EventKeywordInformation, ctypes.byref(buf), ctypes.byref(size))
+    if rc != winerror.ERROR_SUCCESS:
+        raise EztwTdhException(
+            f"TdhQueryProviderFieldInformation failed for provider {provider_guid} with error {rc}")
+    pfi = PROVIDER_FIELD_INFOARRAY.from_buffer_copy(buf[:ctypes.sizeof(PROVIDER_FIELD_INFOARRAY)])
+    # Enumerate array of PROVIDER_FIELD_INFO
+    keywords = {}
+    for keywords_field_info in iterate_array_of(
+            buf, ctypes.sizeof(PROVIDER_FIELD_INFOARRAY), PROVIDER_FIELD_INFO, pfi.NumberOfElements):
+        keyword_name = sanitize_name(read_wstring_at(buf, keywords_field_info.NameOffset), '_')
+        keywords[keyword_name] = keywords_field_info.Value
+    return keywords
 
 @cache
 def tdh_get_provider_events(provider_guid: str) -> list[EventMetadata]:

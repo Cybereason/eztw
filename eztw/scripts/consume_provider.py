@@ -13,7 +13,7 @@ import sys
 import time
 import contextlib
 
-from .. import get_provider, consume_events
+from .. import get_provider, consume_events, MAX_KEYWORDS
 from ..log import LOGGER
 
 def main():
@@ -21,15 +21,17 @@ def main():
         print(f"USAGE: {sys.argv[0]} [provider name or GUID] <event ids, comma-separated>")
         sys.exit(1)
     provider = get_provider(sys.argv[1])
+    keywords = None
     if len(sys.argv) > 2:
         event_ids = list(set(map(int, sys.argv[2].split(','))))
         events = provider.get_events_by_ids(event_ids)
     else:
         # Consume all provider's events
         events = provider.events
+        keywords = {provider.guid: MAX_KEYWORDS}
     LOGGER.info(f"Consuming {len(events)} events from {provider.guid} - press Ctrl+C to stop")
     with contextlib.suppress(KeyboardInterrupt):
-        for i, (event_record, parsed_event) in enumerate(consume_events(events)):
+        for i, (event_record, parsed_event) in enumerate(consume_events(events, keywords=keywords)):
             print(f"=== [Event {i}] {time.ctime(event_record.timestamp)} ===")
             print(event_record)
             print(parsed_event)

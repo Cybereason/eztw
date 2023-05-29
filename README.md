@@ -6,6 +6,7 @@
   + [Known limitations](#known-limitations) 
 + [Usage](#usage)
   + [Trace providers and event templates](#trace-providers-and-event-templates)
+  + [Trace keywords](#trace-keywords)
   + [Trace controllers and consumers](#trace-controller-and-consumer)
   + [Eztw simplified](#eztw-simplified)
   + [Event Filter and Event Dispatcher](#event-filter-and-event-dispatcher)
@@ -133,6 +134,28 @@ provider.get_events_by_ids([12, 15])
 Note that not all providers have such a clean and straight-forward list of events.
 Some are obscure and poorly documented, with less meaningful event names.
 Some do not have any locally registered description, but can be added manually (see relevant [section](#manually-adding-new-providers)).
+
+### Trace Keywords
+
+When creating a trace session, the way to control which events are consumed is by supplying a 64-bit keyword bitmask.
+The meaning of these keywords is proprietary for each provider.
+Note that while each event has its own combination of keywords used to enable it, this is not always enough - in some cases there are define provider keywords which are not found in any specific event.
+In these cases, the right combination of keywords to enable specific events is provider-dependent.
+
+To get a list of all the keywords defined in a provider, access its *keywords* member:
+```python
+provider.keywords
+# {'Keyword_WINEVENT_KEYWORD_PROCESS': 16,
+#  'Keyword_WINEVENT_KEYWORD_THREAD': 32,
+#  'Keyword_WINEVENT_KEYWORD_IMAGE': 64,
+#  ...
+```
+
+These keywords are also defined as members of the provider (the name is identical to the key in the dictionary):
+```python
+provider.Keyword_WINEVENT_KEYWORD_IMAGE
+# 64
+```
 
 ### Trace controller and consumer
 
@@ -307,6 +330,14 @@ with EztwController(session_name, config2):
     ...
 ```
 
+It's also possible to manually set the keywords for the providers while calling get_provider_config by providing the *keywords* parameter with a dictionary that maps from provider GUIDs to the desired keywords.
+This is required in some cases where the events' keywords are not enough to implicitly deduce which keywords need to be enabled:
+```python
+get_provider_config([provider.Event_ProcessStart_1, provider2.Event_CreateNewFile_30], keywords={provider2.guid: 12345678})
+# [EztwProviderConfig(guid='{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}', keywords=16, level=5),
+#  EztwProviderConfig(guid='{edd08927-9cc4-4e65-b970-c2560fb5c289}', keywords=12345678, level=5)]
+```
+
 Now let's revisit and expand the first scenario - we want to consume the ProcessStart event, parse it and print to screen whenever a new *notepad.exe* process is started.
 
 Instead of using any of the previously described classes, it's possible to simply use the **consume_events** function, which receives a single **EztwEvent** or a list of them and handles everything automagically!
@@ -330,6 +361,8 @@ The **consume_events** function does several things:
 + Starts consuming events using **EztwConsumer** from the created session.
 + Filters only the requested events, ignoring others.
 + Parses all requested events and returns them in addition to the event record.
+
+Note that consume_events too may receive an optional *keywords* dictionary to manually set the desired keywords (passed as-is to get_provider_config).
 
 Additionally, there's another feature - when stopping the loop using Ctrl+C (KeyboardInterrupt), instead of simply raising an ugly exception, we get a nice summary printout of all the events consumed during the operation (even the skipped ones).
 
@@ -423,22 +456,35 @@ provider.print()
 ```
 
 This will result in something similar to:
-
 ```
 Provider GUID={22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716} (Microsoft-Windows-Kernel-Process)
 ****************************************
-    Event ID=1 (ProcessStart)
-        Version 0:
-            ProcessID: INTYPE_UINT32
-            CreateTime: INTYPE_FILETIME
-            ParentProcessID: INTYPE_UINT32
-            SessionID: INTYPE_UINT32
-            ImageName: INTYPE_UNICODESTRING
-        Version 1:
-            ProcessID: INTYPE_UINT32
-            CreateTime: INTYPE_FILETIME
-            ParentProcessID: INTYPE_UINT32
-        ...
+Keywords:
+  Keyword_WINEVENT_KEYWORD_PROCESS = 0x10
+  Keyword_WINEVENT_KEYWORD_THREAD = 0x20
+  Keyword_WINEVENT_KEYWORD_IMAGE = 0x40
+  Keyword_WINEVENT_KEYWORD_CPU_PRIORITY = 0x80
+  Keyword_WINEVENT_KEYWORD_OTHER_PRIORITY = 0x100
+  Keyword_WINEVENT_KEYWORD_PROCESS_FREEZE = 0x200
+  Keyword_WINEVENT_KEYWORD_JOB = 0x400
+  Keyword_WINEVENT_KEYWORD_ENABLE_PROCESS_TRACING_CALLBACKS = 0x800
+  Keyword_WINEVENT_KEYWORD_JOB_IO = 0x1000
+  Keyword_WINEVENT_KEYWORD_WORK_ON_BEHALF = 0x2000
+  Keyword_WINEVENT_KEYWORD_JOB_SILO = 0x4000
+  Keyword_Microsoft_Windows_Kernel_Process_Analytic = 0x8000000000000000
+Events:
+  Event ID=1 (ProcessStart)
+    Version 0:
+      ProcessID: INTYPE_UINT32
+      CreateTime: INTYPE_FILETIME
+      ParentProcessID: INTYPE_UINT32
+      SessionID: INTYPE_UINT32
+      ImageName: INTYPE_UNICODESTRING
+    Version 1:
+      ProcessID: INTYPE_UINT32
+      CreateTime: INTYPE_FILETIME
+      ParentProcessID: INTYPE_UINT32
+      ...
 ```
 
 Of course, as mentioned before, each EztwEvent also has its own **print** method:

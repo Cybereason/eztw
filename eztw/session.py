@@ -125,7 +125,8 @@ class EztwSessionIterator:
             print()
 
 
-def consume_events(events: EztwEvent | list[EztwEvent], session_name: str | None = None):
+def consume_events(events: EztwEvent | list[EztwEvent], session_name: None | str = None,
+                   keywords: None | dict[str, int] = None):
     """
     Convenience function that automatically deducts the needed providers and keywords from the given list of
     event classes, and only yields the parsed events if they're on the list (provider GUID + event ID).
@@ -135,9 +136,10 @@ def consume_events(events: EztwEvent | list[EztwEvent], session_name: str | None
 
     @param events: a single EztwEvent or a list of them - only these events will be parsed and returned
     @param session_name: either a session name to use or None (default, in which case a temporary name is used)
+    @param keywords: either None (implicit keywords from events) or a dict from provider GUID to keyword value
     """
     if not session_name:
         session_name = ad_hoc_session_name()
     # Start consuming
-    with EztwController(session_name, get_provider_config(events)):
+    with EztwController(session_name, get_provider_config(events, keywords=keywords)):
         yield from EztwSessionIterator(session_name, events)
