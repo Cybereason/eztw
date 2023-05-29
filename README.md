@@ -517,7 +517,11 @@ from eztw.tdh import EventMetadata, EventFieldMetadata, EVENT_FIELD_INTYPE
 
 provider_guid = "{03020100-0504-0706-0809-0a0b0c0d0e0f}"
 provider_name = "My New Provider"
-events = [
+provider_keywords = {
+  "My_Keyword1": 0x100,
+  "My_Keyword2": 0x200,
+}
+provider_events = [
   # ID 123, version 0
   EventMetadata(provider_guid, 123, 0, "My event", 0x100,  # Keyword
                 # Fields
@@ -541,7 +545,7 @@ These three parameters can then be used to add a new provider (overwriting any w
 from eztw import add_manual_provider
 
 # Add a new provider and return the new EztwProvider instance
-add_manual_provider(provider_guid, provider_name, events)
+add_manual_provider(provider_guid, provider_name, provider_keywords, provider_events)
 # EztwProvider(guid={03020100-0504-0706-0809-0a0b0c0d0e0f}, name='My New Provider', 1 events)
 ```
 

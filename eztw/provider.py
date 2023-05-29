@@ -136,8 +136,9 @@ class EztwManager:
         self.providers[MSNT_SystemTrace_GUID] = self._unknown_provider_tombstone
         self.provider_name_by_guid[MSNT_SystemTrace_GUID] = "MSNT_SystemTrace"
 
-    def add_manual_provider(self, provider_guid: str, provider_name: str, provider_events: list[EventMetadata]):
-        new_provider = EztwProvider(provider_guid, provider_name, provider_events)
+    def add_manual_provider(self, provider_guid: str, provider_name: str, provider_keywords: dict[str, int],
+                            provider_events: list[EventMetadata]):
+        new_provider = EztwProvider(provider_guid, provider_name, provider_keywords, provider_events)
         self.providers[new_provider.guid] = new_provider
         self.provider_name_by_guid[new_provider.guid] = provider_name
         self.provider_guid_by_name[canonize_provider_name(provider_name)] = new_provider.guid
@@ -220,20 +221,23 @@ def get_provider_config(events: EztwEvent | list[EztwEvent], keywords: None | di
     for event in as_list(events):
         by_provider_guid[event.provider_guid] |= event.keyword
     # Override implicit keywords as needed
-    for provider_guid, keywords in keywords.items():
-        if provider_guid in by_provider_guid:
-            by_provider_guid[provider_guid] = keywords
+    if keywords:
+        for provider_guid, keywords in keywords.items():
+            if provider_guid in by_provider_guid:
+                by_provider_guid[provider_guid] = keywords
     return [EztwProviderConfig(guid, keywords, level) for guid, keywords in by_provider_guid.items()]
 
-def add_manual_provider(provider_guid: str, provider_name: str, provider_events: list[EventMetadata]):
+def add_manual_provider(provider_guid: str, provider_name: str, provider_keywords: dict[str, int],
+                        provider_events: list[EventMetadata]):
     """
     Manually add a new provider (potentially overwriting existing one with identical GUID/name)
 
     @param provider_guid: GUID object
     @param provider_name: string
+    @param provider_keywords: a dictionary that maps keyword names to values
     @param provider_events: a list of TdhEvent objects
     """
-    return eztwm.add_manual_provider(provider_guid, provider_name, provider_events)
+    return eztwm.add_manual_provider(provider_guid, provider_name, provider_keywords, provider_events)
 
 def parse_event(event_record: EventRecord):
     """
