@@ -237,7 +237,7 @@ class EztwEvent:
         @return: a nice representation of the event's versions and fields
         """
         indent_str = "\t"*indent
-        res = [f"{indent_str}Event ID={self.id} ({self.name})"]
+        res = [f"{indent_str}Event ID={self.id} ({self.name}) keywords: {hex(self.keyword)}"]
         for version, (fields, _template) in sorted(self.versions.items()):
             res.append(f"{indent_str}\tVersion {version}:")
             if not fields:

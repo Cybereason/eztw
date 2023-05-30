@@ -104,7 +104,7 @@ provider.Event_ProcessStart_1
 To print the versions and fields of an **EztwEvent** simply use the **print** method:
 ```python
 provider.Event_ProcessStart_1.print()
-# Event ID=1 (ProcessStart)
+# Event ID=1 (ProcessStart) keywords: 0x10
 #   Version 0:
 #       ProcessID: INTYPE_UINT32
 #       CreateTime: INTYPE_FILETIME
@@ -473,7 +473,7 @@ Keywords:
   Keyword_WINEVENT_KEYWORD_JOB_SILO = 0x4000
   Keyword_Microsoft_Windows_Kernel_Process_Analytic = 0x8000000000000000
 Events:
-  Event ID=1 (ProcessStart)
+  Event ID=1 (ProcessStart) keywords: 0x10
     Version 0:
       ProcessID: INTYPE_UINT32
       CreateTime: INTYPE_FILETIME
@@ -490,7 +490,7 @@ Events:
 Of course, as mentioned before, each EztwEvent also has its own **print** method:
 ```python
 provider.Event_ImageLoad_5.print()
-# Event ID=5 (ImageLoad)
+# Event ID=5 (ImageLoad) keywords: 0x40
 #   Version 0:
 #       ImageBase: INTYPE_POINTER
 #       ImageSize: INTYPE_POINTER
@@ -513,7 +513,7 @@ This does mean manually constructing *each and every* field of *each and every* 
 Here's an example for a simple provider with a single event which has two versions:
 
 ```python
-from eztw.tdh import EventMetadata, EventFieldMetadata, EVENT_FIELD_INTYPE
+from eztw.trace_common import EventMetadata, EventFieldMetadata, EVENT_FIELD_INTYPE
 
 provider_guid = "{03020100-0504-0706-0809-0a0b0c0d0e0f}"
 provider_name = "My New Provider"
@@ -523,14 +523,14 @@ provider_keywords = {
 }
 provider_events = [
   # ID 123, version 0
-  EventMetadata(provider_guid, 123, 0, "My event", 0x100,  # Keyword
+  EventMetadata(provider_guid, 123, 0, "My event", provider_keywords["My_Keyword1"],
                 # Fields
                 [
                   EventFieldMetadata("field1", EVENT_FIELD_INTYPE.INTYPE_INT32),
                 ]
                 ),
   # ID 123, version 1
-  EventMetadata(provider_guid, 123, 1, "My event", 0x100,
+  EventMetadata(provider_guid, 123, 1, "My event", provider_keywords["My_Keyword2"],
                 [
                   EventFieldMetadata("field1", EVENT_FIELD_INTYPE.INTYPE_INT32),
                   EventFieldMetadata("field2", EVENT_FIELD_INTYPE.INTYPE_ANSISTRING),
