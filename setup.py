@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name="eztw",    
-    version="1.0.1",
+    version="1.0.3",
     description="Easy Python wrapper for ETW",
     url="https://github.com/wild-strudel/eztw",
     author="Uri Sternfeld",

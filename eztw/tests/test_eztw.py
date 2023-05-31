@@ -60,6 +60,7 @@ class TestEztw:
             ("field_systemtime", EVENT_FIELD_INTYPE.INTYPE_SYSTEMTIME, 1234567890.0),
             ("field_countedstring", EVENT_FIELD_INTYPE.INTYPE_COUNTEDSTRING, "test 123"),
             ("field_countedansistring", EVENT_FIELD_INTYPE.INTYPE_COUNTEDANSISTRING, b"test 123"),
+            ("field_size_t", EVENT_FIELD_INTYPE.INTYPE_SIZET, 123456789),
         ]
         event_fields = [EventFieldMetadata(fname, ftype) for fname, ftype, _ in field_names_types_and_values]
 
@@ -153,6 +154,11 @@ class TestEztw:
                 dummy_data_parts.append(struct.pack("<H", len(fvalue)*2) + bytes(ctypes.create_unicode_buffer(fvalue))[:-2])
             elif ftype is EVENT_FIELD_INTYPE.INTYPE_COUNTEDANSISTRING:
                 dummy_data_parts.append(struct.pack("<H", len(fvalue)) + bytes(ctypes.create_string_buffer(fvalue))[:-1])
+            elif ftype is EVENT_FIELD_INTYPE.INTYPE_SIZET:
+                if is_64bit:
+                    dummy_data_parts.append(struct.pack("<Q", fvalue))
+                else:
+                    dummy_data_parts.append(struct.pack("<I", fvalue))
 
         # Special cases
         dummy_data_parts.append(binary_data1)

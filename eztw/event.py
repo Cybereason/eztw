@@ -117,7 +117,7 @@ class FieldsReader:
     def consume_GUID(self):
         return str(GUID.from_buffer_copy(self.consume(16)))
 
-    def consume_BiNARY(self, size=None):
+    def consume_BINARY(self, size=None):
         if size is not None:
             return self.consume(size)
         else:
@@ -131,6 +131,12 @@ class FieldsReader:
     def consume_SIZED_STRING(self):
         size = self.consume_UINT16()
         return ctypes.string_at(self.consume(size) + b'\x00').decode(errors='replace')
+
+    def consume_SIZE_T(self):
+        if self.is_64bit:
+            return self.consume_UINT64()
+        else:
+            return self.consume_UINT32()
 
     def read(self, field: EventFieldMetadata, previous_fields: OrderedDict):
         match field.type:
@@ -171,11 +177,13 @@ class FieldsReader:
             case EVENT_FIELD_INTYPE.INTYPE_GUID:
                 consume_func = self.consume_GUID
             case EVENT_FIELD_INTYPE.INTYPE_BINARY:
-                consume_func = self.consume_BiNARY
+                consume_func = self.consume_BINARY
             case EVENT_FIELD_INTYPE.INTYPE_COUNTEDSTRING:
                 consume_func = self.consume_SIZED_WSTRING
             case EVENT_FIELD_INTYPE.INTYPE_COUNTEDANSISTRING:
                 consume_func = self.consume_SIZED_STRING
+            case EVENT_FIELD_INTYPE.INTYPE_SIZET:
+                consume_func = self.consume_SIZE_T
             case _:
                 raise EztwEventParseException(f"Unknown or unsupported IN_TYPE {field.type!r}")
 
