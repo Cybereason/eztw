@@ -228,11 +228,14 @@ class EztwEvent:
             # Aggregate them just to be on the safe side
             self.keyword |= event_descriptor.keyword
             # Make sure that none of the field names is accidentally also a reserved Python keyword
-            # If so - append an underscore at the end
+            # If so - append an underscore at the end.
+            # If the field name is a number - prepend it with an underscore.
             field_names = []
             for field in event_descriptor.fields:
                 if python_keywords.iskeyword(field.name):
-                    field_names.append(field.name+"_")
+                    field_names.append(field.name + "_")
+                elif not field.name.isidentifier():
+                    field_names.append("_" + field.name)
                 else:
                     field_names.append(field.name)
             self.versions[event_descriptor.version] = (

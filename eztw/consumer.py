@@ -6,6 +6,7 @@ import ctypes
 import queue
 import time
 import threading
+import contextlib
 import win32api
 import winerror
 
@@ -325,10 +326,13 @@ class EztwConsumer:
                 return
             self.stop_event.set()
             self.close_session()
+            self.session_handle = None
 
     def stop(self):
         self._stop()
-        self.consumer_thread.join()
+        if self.consumer_thread is not None:
+            self.consumer_thread.join()
+            self.consumer_thread = None
 
     def pending_events(self) -> int:
         """
@@ -367,14 +371,17 @@ class EztwConsumer:
     def __iter__(self):
         """
         Iterate over all events forever (or until stopped).
+        Implicitly suppresses (but aborts on) keyboard interrupts (Ctrl+C).
         If the session is externally closed (for example, using the logman.exe tool), the iteration stops.
         """
-        while True:
-            if self.stop_event.is_set():
-                break
-            event_record = self.get_event()
-            if event_record is not None:
-                yield event_record
+        with self:
+            with contextlib.suppress(KeyboardInterrupt):
+                while True:
+                    if self.stop_event.is_set():
+                        break
+                    event_record = self.get_event()
+                    if event_record is not None:
+                        yield event_record
 
     def __enter__(self):
         self.start()

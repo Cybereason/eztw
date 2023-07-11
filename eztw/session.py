@@ -92,8 +92,8 @@ class EztwSessionIterator:
                 # Count this event
                 event_counter[event_record.provider_guid][event_record.id] += 1
                 if self.event_filter is None or event_record in self.event_filter:
-                    # Ignore legacy kernel events (for now...)
-                    if event_record.provider_guid == MSNT_SystemTrace_GUID:
+                    # Ignore these provider GUIDs
+                    if event_record.provider_guid in [MSNT_SystemTrace_GUID, LOST_EVENTS_GUID]:
                         continue
                     try:
                         # Parse and yield
@@ -104,7 +104,8 @@ class EztwSessionIterator:
                             print(f"Failed to parse event {event_record} - {e}")
                             unknown_events.add(hash(event_record))
         except KeyboardInterrupt:
-            print("\nCaught KeyboardInterrupt")
+            # Suppress
+            pass
         except Exception as e:
             print(f"\nUnhandled error - {e}")
         finally:

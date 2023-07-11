@@ -4,7 +4,6 @@ Track only processes called notepad.exe.
 """
 import time
 import threading
-import contextlib
 import subprocess
 
 from .. import get_provider, consume_events, EztwDispatcher
@@ -61,11 +60,10 @@ def main():
     threading.Thread(target=delayed_process, args=(process_delay, process_name)).start()
 
     LOGGER.info(f"Waiting for events... (runs forever, press Ctrl+C to stop)")
-    with contextlib.suppress(KeyboardInterrupt):
-        # Consuming and dispatching events is easy!
-        # Note that events_dispatcher has an 'events' member that holds all registered events
-        for event_record, parsed_event in consume_events(events_dispatcher.events):
-            events_dispatcher(event_record, parsed_event)
+    # Consuming and dispatching events is easy!
+    # Note that events_dispatcher has an 'events' member that holds all registered events
+    for event_record, parsed_event in consume_events(events_dispatcher.events):
+        events_dispatcher(event_record, parsed_event)
 
 if __name__ == "__main__":
     main()

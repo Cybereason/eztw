@@ -9,7 +9,6 @@ import time
 import string
 import threading
 import tempfile
-import contextlib
 from dataclasses import dataclass
 
 import win32file
@@ -386,9 +385,7 @@ def main():
     threading.Thread(target=delayed_file_activity, args=(file_delay, filename)).start()
 
     # Start consuming events via FileTracker
-    with contextlib.suppress(KeyboardInterrupt):
-        ft = FileTracker(["eztw_test"])
-        ft.run()
+    FileTracker(["eztw_test"]).run()
 
 if __name__ == "__main__":
     main()

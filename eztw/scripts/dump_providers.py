@@ -31,7 +31,6 @@ def main():
             to_write.append("")
     with open(sys.argv[1], "w") as fp:
         fp.write('\n'.join(to_write))
-    print("Done.")
 
 if __name__ == "__main__":
     main()

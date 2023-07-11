@@ -172,7 +172,7 @@ To start a new session we need two things:
 We can set them manually, of course, using the **EztwProviderConfig** dataclass (but there are easier ways): 
 
 ```python
-from eztw.provider import EztwProviderConfig
+from eztw import EztwProviderConfig
 
 config = EztwProviderConfig(provider.guid, provider.Event_ProcessStart_1.keyword)
 print(config)
@@ -198,6 +198,7 @@ Notes:
 + **EztwController** accepts either a single instance of **EztwProviderConfig**, or a list of them when multiple trace providers are to be consumed in the same session.
 + If a trace session of that name already exists, **EztwController** attempts to stop it and start a new session to replace it.
 + **EztwConsumer** is iterable and yields **EventRecord** objects. When iterated, it runs forever (or until the session is externally closed, or pressing Ctrl+C). There are other, non-blocking ways of consuming events.
++ EztwConsumer implicitly suppresses (but aborts on) keyboard interrupts (Ctrl+C).
 + Instead of using the 'with' syntax, it's possible to manually call the **start** and **stop** methods of both controller and consumer.
 + If a trace session is stopped externally (for example using the *logman.exe* tool), the iteration will stop automatically.
 + It's also possible to consume a pre-existing session (without stopping it at the end, of course - it will continue to exist).
@@ -364,10 +365,8 @@ The **consume_events** function does several things:
 
 Note that consume_events too may receive an optional *keywords* dictionary to manually set the desired keywords (passed as-is to get_provider_config).
 
-Additionally, there's another feature - when stopping the loop using Ctrl+C (KeyboardInterrupt), instead of simply raising an ugly exception, we get a nice summary printout of all the events consumed during the operation (even the skipped ones).
-
 This behavior is provided by the **EztwSessionIterator** class, which is used by **consume_events** but is also useful all by itself.
-In addition to catching keyboard interrupts and printing a nice summary, and in addition to automatically parsing event fields, the session iterator also allows to iterate multiple sessions at the same time (whether these sessions were created by **eztw** or not).
+In addition to printing a nice summary at the end, and in addition to automatically parsing event fields, the session iterator also allows to iterate multiple sessions at the same time (whether these sessions were created by **eztw** or not).
 The decision whether the session iterator consumes a single or multiple session is determined by the parameter (a single string or a list of strings).
 In such cases, a separate thread is created for each trace session.
 When consuming multiple sessions, the consumed events are NOT guaranteed to be ordered by the correct time.

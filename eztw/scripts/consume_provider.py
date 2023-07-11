@@ -11,7 +11,6 @@ python -m eztw.scripts.consume_provider microsoft-windows-kernel-process 1,3
 """
 import sys
 import time
-import contextlib
 
 from .. import get_provider, consume_events, MAX_KEYWORDS
 from ..log import LOGGER
@@ -30,11 +29,10 @@ def main():
         events = provider.events
         keywords = {provider.guid: MAX_KEYWORDS}
     LOGGER.info(f"Consuming {len(events)} events from {provider.guid} - press Ctrl+C to stop")
-    with contextlib.suppress(KeyboardInterrupt):
-        for i, (event_record, parsed_event) in enumerate(consume_events(events, keywords=keywords)):
-            print(f"=== [Event {i}] {time.ctime(event_record.timestamp)} ===")
-            print(event_record)
-            print(parsed_event)
+    for i, (event_record, parsed_event) in enumerate(consume_events(events, keywords=keywords)):
+        print(f"=== [Event {i}] {time.ctime(event_record.timestamp)} ===")
+        print(event_record)
+        print(parsed_event)
 
 if __name__ == "__main__":
     main()
